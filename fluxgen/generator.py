@@ -134,9 +134,9 @@ def generate_image(
     if guidance is not None:
         gen_kwargs["guidance"] = guidance
 
-    # Negative conditioning — an empty string is meaningful (e.g. it is
-    # what enables true CFG > 1.0 on Qwen-Image-2.1), so only ``None``
-    # means "not requested".
+    # Negative conditioning — forwarded only when requested; ``None``
+    # means "not requested" so the kwarg never reaches models whose
+    # signature lacks it.
     if negative_prompt is not None:
         gen_kwargs["negative_prompt"] = negative_prompt
 

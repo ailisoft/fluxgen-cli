@@ -118,8 +118,9 @@ MODELS: dict[str, ModelSpec] = {
     # Krea 2 Turbo: timestep-distilled to 8 steps (CFG 1.0). Generation-only;
     # there is no mflux edit checkpoint, so it must not appear under ``edit``.
     # Recommend ``--steps 8`` — the shared presets (5/9/16) predate its
-    # distillation and are not its sweet spot. negative_prompt only engages
-    # when guidance > 1.0 is also passed (CFG is off at 1.0).
+    # distillation and are not its sweet spot. negative_prompt engages only
+    # when guidance differs from 1.0 (mflux skips it at the 1.0 default),
+    # so the MCP layer requires guidance > 1.0 alongside it.
     "krea2": ModelSpec(
         name="krea2",
         capabilities=_GENERATE,

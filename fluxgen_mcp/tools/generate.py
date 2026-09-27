@@ -165,6 +165,20 @@ async def generate_image_tool(
                 f"models with support: "
                 f"{', '.join(n for n, s in MODELS.items() if s.supports_negative_prompt)}",
             )
+        # Even on supported models, negative encoding only runs when CFG
+        # is active: mflux skips it at guidance <= 1.0 (z-image) / at
+        # guidance == 1.0 (krea2, whose spec default is 1.0). Effective
+        # guidance mirrors the generator's resolution: explicit beats spec.
+        effective_guidance = (
+            final_guidance if final_guidance is not None else target_spec.guidance
+        )
+        if effective_guidance is None or effective_guidance <= 1.0:
+            raise MCPError(
+                E_BAD_ARG,
+                f"negative_prompt requires guidance > 1.0 on {target_model!r} "
+                f"(effective guidance would be {effective_guidance}); "
+                f"pass guidance > 1.0 or drop negative_prompt",
+            )
         final_negative_prompt = negative_prompt
 
     final_w = width if width is not None else 512

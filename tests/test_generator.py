@@ -306,7 +306,9 @@ def test_generate_image_explicit_steps_and_guidance_override_preset(tmp_path):
 
 
 def test_generate_image_negative_prompt_passthrough_including_empty(tmp_path):
-    """Empty string is meaningful (true-CFG enablement) and must survive."""
+    """An explicit empty string is forwarded verbatim (mflux substitutes a
+    space for it, so it is behaviorally identical to omission — but the
+    caller's explicit value must not be second-guessed here)."""
     from fluxgen.generator import generate_image
 
     mock_model = MagicMock()

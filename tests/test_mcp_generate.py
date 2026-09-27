@@ -620,3 +620,52 @@ async def test_generate_guidance_upper_bound_rejected(tmp_path: Path):
             output_subdir="default",
         )
     assert exc.value.code == E_BAD_ARG
+
+
+async def test_generate_negative_prompt_krea2_default_guidance_rejected(
+    tmp_path: Path,
+):
+    """krea2's spec default guidance is 1.0, where mflux skips negative
+    encoding — reject instead of silently no-oping."""
+    s = _settings(tmp_path, allowed_generation_models=("krea2",))
+    with pytest.raises(MCPError) as exc:
+        await generate_image_tool(
+            settings=s,
+            prompt="a cat",
+            model="krea2",
+            preset=None,
+            negative_prompt="blurry",
+            width=None,
+            height=None,
+            seed=None,
+            style=None,
+            init_image_path=None,
+            strength=None,
+            output_subdir="default",
+        )
+    assert exc.value.code == E_BAD_ARG
+    assert "guidance > 1.0" in str(exc.value)
+
+
+async def test_generate_negative_prompt_with_guidance_gt_1_passes(
+    tmp_path: Path, mock_generate
+):
+    """krea2 + explicit guidance 1.5 + negative_prompt is the valid combo."""
+    s = _settings(tmp_path, allowed_generation_models=("krea2",))
+    await generate_image_tool(
+        settings=s,
+        prompt="a cat",
+        model="krea2",
+        preset=None,
+        guidance=1.5,
+        negative_prompt="blurry",
+        width=None,
+        height=None,
+        seed=None,
+        style=None,
+        init_image_path=None,
+        strength=None,
+        output_subdir="default",
+    )
+    assert mock_generate[0]["guidance"] == 1.5
+    assert mock_generate[0]["negative_prompt"] == "blurry"
