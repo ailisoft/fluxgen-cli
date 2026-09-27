@@ -90,8 +90,8 @@ Caveats:
 #### Qwen-Image-2.1 (`--model qwen21`)
 
 `qwen21` runs [Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1), a 7B single-stream
-block-causal DiT with a Qwen3-VL text encoder. It is guidance-free (fluxgen never passes
-`--guidance` for this model) and defaults to `--quantize 4` weights. Recommended invocation:
+block-causal DiT with a Qwen3-VL text encoder. It is guidance-free (no guidance value is ever
+passed to mflux for this model) and defaults to `--quantize 4` weights. Recommended invocation:
 
 ```bash
 fluxgen gen "A photograph of a red fox in a sunlit forest" --model qwen21 --steps 40

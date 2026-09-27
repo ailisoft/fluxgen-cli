@@ -58,8 +58,8 @@ Supported generation backends:
 - `flux2-klein4b`
 - `flux2-klein9b`
 - `krea2` (Krea 2 Turbo; 8-step distilled, ~33 GB download, ~32 GB+ unified memory)
-- `qwen21` (Qwen-Image-2.1; 40-step guidance-free, ~33 GB download, ~46 GB peak —
-  needs `mflux >= 0.20.0`)
+- `qwen21` (Qwen-Image-2.1; 40-step guidance-free, ~33 GB download, defaults to q4
+  (~24 GB peak; bf16 peaks ~46 GB) — needs `mflux >= 0.20.0`)
 
 `krea2` is generation-only — there is no mflux edit checkpoint, so it is not
 registered under `fluxgen edit`. `qwen21` is generation-only too: upstream
