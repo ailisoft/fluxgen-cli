@@ -1,8 +1,8 @@
 """`generate_image` MCP tool.
 
 Thin wrapper over `fluxgen.generator.generate_image` that:
-  - validates the prompt against the safety policy,
-  - enforces model + dimension + preset bounds,
+  - validates the prompt and negative prompt against the safety policy,
+  - enforces model + dimension + preset + steps bounds,
   - resolves the output path under the sandbox root,
   - delegates the actual generation to `asyncio.to_thread` so the
     MCP event loop stays responsive,
@@ -34,7 +34,11 @@ from fluxgen.presets import PRESETS, PRESETS_BY_NAME
 from fluxgen_mcp.config import MCPSettings
 from fluxgen_mcp.errors import E_BAD_ARG, E_MODEL, MCPError, EXCEPTION_MAP
 from fluxgen_mcp.safety import check_pause, resolve_sandbox_output, validate_prompt
-from fluxgen_mcp.validation import validate_init_image
+from fluxgen_mcp.validation import (
+    resolve_guidance,
+    resolve_steps,
+    validate_init_image,
+)
 
 logger = logging.getLogger("fluxgen-mcp")
 
@@ -73,6 +77,9 @@ async def generate_image_tool(
     prompt: str,
     model: str | None,
     preset: str | None,
+    steps: int | None = None,
+    guidance: float | None = None,
+    negative_prompt: str | None = None,
     width: int | None,
     height: int | None,
     seed: int | None,
@@ -116,11 +123,29 @@ async def generate_image_tool(
         )
 
     preset_dict = _resolve_preset(preset)
-    if preset_dict["steps"] > settings.max_steps:
+    # Explicit caller steps/guidance override the preset value; both
+    # are capped by the same deployment settings. resolve_steps rejects
+    # out-of-range values; the preset branch keeps its historical
+    # "exceeds max_steps" wording.
+    final_steps = resolve_steps(steps, settings)
+    if final_steps is None and preset_dict["steps"] > settings.max_steps:
         raise MCPError(
             E_BAD_ARG,
             f"preset steps {preset_dict['steps']} exceeds max_steps {settings.max_steps}",
         )
+    final_guidance = resolve_guidance(guidance)
+
+    # Negative conditioning shares the prompt safety policy (length cap
+    # + blocklist). An empty string is valid — it is what enables true
+    # CFG > 1.0 on models like qwen21 — so only None means "not
+    # requested". Models whose mflux signature lacks the kwarg are
+    # rejected here rather than deep inside generation.
+    final_negative_prompt: str | None = None
+    if negative_prompt is not None:
+        if not isinstance(negative_prompt, str):
+            raise MCPError(E_BAD_ARG, "negative_prompt must be a string")
+        validate_prompt(settings, negative_prompt)
+        final_negative_prompt = negative_prompt
 
     final_w = width if width is not None else 512
     final_h = height if height is not None else 512
@@ -158,6 +183,9 @@ async def generate_image_tool(
             generate_image,
             prompt=prompt,
             preset=preset_dict,
+            steps=final_steps,
+            guidance=final_guidance,
+            negative_prompt=final_negative_prompt,
             seed=final_seed,
             output=output_path,
             width=final_w,
@@ -197,6 +225,10 @@ async def generate_image_tool(
         "width": final_w,
         "height": final_h,
         "seed": final_seed,
+        # Effective step count actually used (explicit override or the
+        # preset the caller selected) so agents can correlate quality
+        # with sampling budget.
+        "steps": final_steps if final_steps is not None else preset_dict["steps"],
         "elapsed_s": round(elapsed, 3),
         "model": target_model,
     }

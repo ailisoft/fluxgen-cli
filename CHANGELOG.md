@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added per-call `steps`, `guidance`, and `negative_prompt` parameters to the MCP
+  `generate_image` tool. `steps` is capped by the existing `max_steps` setting and overrides
+  the preset (lets agents reach e.g. Qwen-Image-2.1's 40-step sampling); `guidance` must be
+  > 0 and overrides the preset/spec chain when passed; `negative_prompt` shares the prompt
+  content filter (an empty string is valid — it enables true CFG > 1.0 on models that support
+  it) and is rejected up front for models whose mflux signature lacks the kwarg (Flux.2
+  Klein). The result dict now reports the effective `steps`. Internals: step/guidance
+  validation moved to shared `validation.resolve_steps`/`resolve_guidance` used by both
+  tools; explicit caller `guidance` now beats guidance-free spec guards (preset/spec
+  fallbacks stay blocked); new `ModelSpec.supports_negative_prompt` flag.
 - Added `krea2` (Krea 2 Turbo) as a generation-only model: 8-step-distilled, CFG 1.0,
   ~33 GB first-run download (~32 GB+ unified memory recommended). Use `--steps 8 -q 8`;
   the shared presets (5/9/16 steps) predate its distillation and are not its sweet spot.

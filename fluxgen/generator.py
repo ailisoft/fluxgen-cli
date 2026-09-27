@@ -7,6 +7,7 @@ from typing import Any
 
 from fluxgen.models import (
     DEFAULT_MODEL,
+    MODELS,
     ModelManager,
     SUPPORTED_MODELS,
     require_capability,
@@ -72,6 +73,9 @@ def generate_image(
     custom_styles: dict[str, str] | None = None,
     init_image: str | None = None,
     strength: float = 0.4,
+    steps: int | None = None,
+    guidance: float | None = None,
+    negative_prompt: str | None = None,
     model_name: str = DEFAULT_MODEL,
     model: Any = None,
 ) -> None:
@@ -94,7 +98,17 @@ def generate_image(
         init_image = validate_image_file(init_image, label="reference image")
 
     spec = require_capability(model_name, "generate")
-    steps, guidance = resolve_inference_params(spec, preset=preset)
+    if negative_prompt is not None and not spec.supports_negative_prompt:
+        raise ValueError(
+            f"Model '{spec.name}' does not support negative_prompt. "
+            f"Models with negative-prompt support: "
+            f"{', '.join(n for n, s in MODELS.items() if s.supports_negative_prompt)}"
+        )
+    # Explicit steps/guidance (MCP callers) take priority over the preset,
+    # whose values in turn take priority over the spec defaults.
+    steps, guidance = resolve_inference_params(
+        spec, steps=steps, guidance=guidance, preset=preset
+    )
 
     logger.info(f"Using model '{spec.name}' with {steps} steps, seed={seed}")
 
@@ -119,6 +133,12 @@ def generate_image(
     # Add guidance only for models that support it
     if guidance is not None:
         gen_kwargs["guidance"] = guidance
+
+    # Negative conditioning — an empty string is meaningful (e.g. it is
+    # what enables true CFG > 1.0 on Qwen-Image-2.1), so only ``None``
+    # means "not requested".
+    if negative_prompt is not None:
+        gen_kwargs["negative_prompt"] = negative_prompt
 
     # Generate the image
     result = model.generate_image(**gen_kwargs)

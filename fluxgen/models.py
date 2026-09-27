@@ -25,6 +25,11 @@ class ModelSpec:
     # (e.g. guidance-free turbo variants).
     guidance: float | None
     factory: Callable[[int | None], Any]
+    # Whether the model's ``generate_image`` accepts a
+    # ``negative_prompt`` kwarg (true-CFG / negative-conditioning
+    # models). Flux.2 Klein's signature lacks it, so callers must
+    # not pass one there.
+    supports_negative_prompt: bool = False
 
 
 def _make_zimage(quantize: int | None):
@@ -81,6 +86,7 @@ MODELS: dict[str, ModelSpec] = {
         capabilities=_GENERATE,
         steps=4,
         guidance=None,
+        supports_negative_prompt=True,
         factory=_make_zimage_turbo,
     ),
     "zimage": ModelSpec(
@@ -88,6 +94,7 @@ MODELS: dict[str, ModelSpec] = {
         capabilities=_GENERATE,
         steps=20,
         guidance=4.0,
+        supports_negative_prompt=True,
         factory=_make_zimage,
     ),
     "flux2-klein4b": ModelSpec(
@@ -113,6 +120,7 @@ MODELS: dict[str, ModelSpec] = {
         capabilities=_GENERATE,
         steps=8,
         guidance=1.0,
+        supports_negative_prompt=True,
         factory=_make_krea2,
     ),
     "flux2-klein-edit": ModelSpec(
@@ -188,6 +196,12 @@ def resolve_inference_params(
     Priority (highest to lowest): explicit kwargs → ``preset`` values
     (when the key is present and not ``None``) → ``ModelSpec`` defaults.
 
+    One exception to the plain priority chain: a guidance-free spec
+    (``guidance=None``, e.g. turbo variants) blocks the *preset*
+    fallback so stale preset values cannot leak CFG into a distilled
+    model — but an explicit ``guidance`` kwarg always wins, since it is
+    a deliberate caller decision (the MCP server passes one).
+
     ``Preset`` dataclasses always serialize ``guidance: None``, so a
     plain ``dict.get("guidance", default)`` would incorrectly skip
     model defaults. This helper fixes that.
@@ -199,6 +213,11 @@ def resolve_inference_params(
         resolved_steps = preset.get("steps")
     if resolved_steps is None:
         resolved_steps = spec.steps
+
+    # Explicit caller guidance always applies (see docstring); the
+    # guidance-free guard only blocks the preset/spec fallbacks.
+    if guidance is not None:
+        return resolved_steps, guidance
 
     if spec.guidance is None:
         return resolved_steps, None

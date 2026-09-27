@@ -5,7 +5,9 @@ MCP-specific bounds (size cap, dimension cap) and emits `MCPError`
 on rejection. The base validator raises `fluxgen.exceptions` which
 the tool layer maps via `EXCEPTION_MAP`; the size and dimension
 checks raise `MCPError` directly because they are MCP-policy
-overrides on top of the underlying image validity.
+overrides on top of the underlying image validity. Shared inference
+parameter resolvers (`resolve_steps`, `resolve_guidance`) also live
+here so both tools validate identically.
 """
 from __future__ import annotations
 
@@ -13,6 +15,7 @@ import os
 from pathlib import Path
 
 from fluxgen.image_validation import validate_image_file
+from fluxgen_mcp.config import MCPSettings
 from fluxgen_mcp.errors import (
     E_BAD_ARG,
     E_INVALID_INPUT_IMAGE,
@@ -122,3 +125,28 @@ def validate_init_image(
     """
     result = validate_edit_inputs([path], max_bytes=max_bytes, max_dimension=max_dimension)
     return result[0]
+
+def resolve_steps(steps: int | None, settings: MCPSettings) -> int | None:
+    """Validate a caller-supplied inference step count.
+
+    ``None`` means "not requested" (preset/spec defaults apply). Valid
+    range is ``[1, settings.max_steps]`` — the same ceiling the preset
+    path is checked against.
+    """
+    if steps is None:
+        return None
+    if steps < 1 or steps > settings.max_steps:
+        raise MCPError(
+            E_BAD_ARG,
+            f"steps must be in [1, {settings.max_steps}]; got {steps}",
+        )
+    return int(steps)
+
+
+def resolve_guidance(guidance: float | None) -> float | None:
+    """Validate a caller-supplied guidance scale. ``None`` = not requested."""
+    if guidance is None:
+        return None
+    if guidance <= 0:
+        raise MCPError(E_BAD_ARG, f"guidance must be > 0; got {guidance}")
+    return float(guidance)

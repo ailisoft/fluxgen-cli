@@ -207,7 +207,7 @@ A local configuration in the current directory will automatically take precedenc
 
 `fluxgen-mcp` exposes image generation and editing to AI agents over the [Model Context Protocol](https://modelcontextprotocol.io/) (stdio transport). The agent sees two tools:
 
-- `generate_image` — text-to-image with optional image-to-image init
+- `generate_image` — text-to-image with optional image-to-image init. Beyond `prompt`/`model`/`preset`, it accepts per-call `steps` (capped by `max_steps`, overriding the preset), `guidance` (> 0), and `negative_prompt` (subject to the same content filter as the prompt; an empty string is meaningful — it is what enables true CFG > 1.0 on models that support it). Models without negative-prompt support (Flux.2 Klein) reject the parameter up front. The result reports the effective `steps` used.
 - `edit_image` — instruction-based editing (`flux2-klein-edit`, multi-image)
 
 All output paths are sandboxed under `output_root`. Models, dimensions, and prompt lengths are bounded by `.fluxgen.toml`. Every call writes a JSONL audit record (mode `0600`) including the full prompt and a SHA-256 of it. Prompt blocklist is opt-in (default empty).
