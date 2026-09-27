@@ -461,7 +461,10 @@ def handle_edit(args, config=None, interactive=False):
         output_path = resolve_output_path(args.output, args.output_dir, generate_edit_filename)
 
         model_name = getattr(args, "model", DEFAULT_EDIT_MODEL)
-        quantize = getattr(args, "quantize", None)
+        # Same "0 means unset" normalization as the generate path: 0 is not
+        # a valid MLX quantization level and must not become an explicit
+        # ModelManager cache key.
+        quantize = getattr(args, "quantize", None) or None
         seed = getattr(args, "seed", None)
 
         editor = ImageEditor(model_name=model_name, quantize=quantize)

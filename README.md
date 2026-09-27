@@ -91,7 +91,7 @@ Caveats:
 
 `qwen21` runs [Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1), a 7B single-stream
 block-causal DiT with a Qwen3-VL text encoder. It is guidance-free (fluxgen never passes
-`--guidance` for this model) and defaults to `-q 4` weights. Recommended invocation:
+`--guidance` for this model) and defaults to `--quantize 4` weights. Recommended invocation:
 
 ```bash
 fluxgen gen "A photograph of a red fox in a sunlit forest" --model qwen21 --steps 40
@@ -104,10 +104,10 @@ Caveats:
   recommended sampling and are not its sweet spot — pass `--steps 40` (or your own value)
   explicitly for best quality.
 - First run downloads ~33 GB of bf16 weights. The Qwen3-VL text encoder (~17.5 GB bf16) is
-  **never quantized** and stays resident regardless of `-q`; the default `-q 4` keeps the
-  transformer at ~4 GB so budget roughly ~24 GB+ of unified memory. Pass `-q 8` (or bf16)
-  for maximum fidelity — upstream measures bf16 as both the fastest and most accurate path,
-  peaking around ~46 GB (64 GB machines).
+  **never quantized** and stays resident regardless of `--quantize`; the default
+  `--quantize 4` keeps the transformer at ~4 GB so budget roughly ~24 GB+ of unified memory.
+  Pass `--quantize 8` for maximum fidelity (upstream measures unquantized bf16 as the most
+  accurate path, peaking around ~46 GB on 64 GB machines).
 - `--quantize` always wins over this model's q4 default; the shared presets' quantize values
   are ignored for it.
 - True CFG exists upstream but requires a negative prompt, which this CLI does not plumb;
