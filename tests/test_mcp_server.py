@@ -97,6 +97,23 @@ async def test_success_writes_audit_record_with_seed_and_path(tmp_path: Path, mo
     assert rec["error_code"] is None
     # generate_image has no input_paths; the field is omitted.
     assert "input_paths" not in rec
+    # No negative_prompt supplied; the key is omitted.
+    assert "negative_prompt" not in rec
+
+
+async def test_negative_prompt_reaches_audit_record(tmp_path: Path, mock_generate):
+    """Server-level: a supplied negative_prompt lands in the audit record
+    through _with_safety (model-facing content audited like the prompt)."""
+    s = _settings(tmp_path, allowed_generation_models=("zimage",))
+    server = build_server(s)
+    fn = _get_tool(server, "generate_image")
+
+    await fn(prompt="a cat", model="zimage", negative_prompt="blurry",
+             output_subdir="default")
+
+    records = _read_audit(Path(s.audit_log_path))
+    assert len(records) == 1
+    assert records[0]["negative_prompt"] == "blurry"
 
 
 async def test_edit_success_writes_audit_record_with_input_paths(

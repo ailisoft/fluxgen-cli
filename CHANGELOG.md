@@ -7,9 +7,11 @@
   the preset (lets agents run beyond preset step counts); `guidance` is bounded to `(0, 20]`
   and rejected for guidance-free models (turbo variants silently ignore CFG, so honoring it
   would mislead callers); `negative_prompt` shares the prompt content filter and is rejected
-  up front for models whose mflux signature lacks the kwarg (Flux.2 Klein) — an empty string
-  is a valid explicit value, and a supplied `negative_prompt` is now recorded in the audit
-  log like the prompt. The result dict reports the effective `steps`. Internals: step/guidance
+  up front for models that would silently ignore it (Flux.2 Klein lacks the sampler input;
+  the guidance-free turbo variants never encode a negative) — an empty string is a valid
+  explicit value, and a supplied `negative_prompt` is now recorded in the audit log like the
+  prompt. Guidance is also rejected for guidance-free models rather than being silently
+  coerced to 0.0 by mflux. The result dict reports the effective `steps`. Internals: step/guidance
   validation moved to shared `validation.resolve_steps`/`resolve_guidance` used by both
   tools; new `ModelSpec.supports_negative_prompt` flag.
 - Added `krea2` (Krea 2 Turbo) as a generation-only model: 8-step-distilled, CFG 1.0,

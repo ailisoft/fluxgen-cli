@@ -403,13 +403,17 @@ async def test_generate_nonpositive_guidance_rejected(tmp_path: Path):
 
 
 async def test_generate_negative_prompt_passthrough(tmp_path: Path, mock_generate):
-    """A negative prompt (including empty, which enables true CFG on qwen21)
-    reaches the generator untouched."""
-    s = _settings(tmp_path)
+    """A negative prompt (including empty) reaches the generator untouched.
+
+    Uses `zimage` — the default zimage-turbo is guidance-free, so its
+    sampler never encodes a negative prompt and the tool rejects the
+    parameter for it instead of silently no-oping.
+    """
+    s = _settings(tmp_path, allowed_generation_models=("zimage",))
     await generate_image_tool(
         settings=s,
         prompt="a cat",
-        model=None,
+        model="zimage",
         preset=None,
         negative_prompt="",
         width=None,
@@ -423,7 +427,7 @@ async def test_generate_negative_prompt_passthrough(tmp_path: Path, mock_generat
     await generate_image_tool(
         settings=s,
         prompt="a cat",
-        model=None,
+        model="zimage",
         preset=None,
         negative_prompt="blurry, low quality",
         width=None,
@@ -436,6 +440,72 @@ async def test_generate_negative_prompt_passthrough(tmp_path: Path, mock_generat
     )
     assert mock_generate[0]["negative_prompt"] == ""
     assert mock_generate[1]["negative_prompt"] == "blurry, low quality"
+
+
+async def test_generate_negative_prompt_on_guidance_free_default_rejected(
+    tmp_path: Path,
+):
+    """zimage-turbo (the default model) runs guidance-free, so its sampler
+    never encodes a negative prompt — reject rather than silently no-op."""
+    s = _settings(tmp_path)  # default model zimage-turbo
+    with pytest.raises(MCPError) as exc:
+        await generate_image_tool(
+            settings=s,
+            prompt="a cat",
+            model=None,
+            preset=None,
+            negative_prompt="blurry",
+            width=None,
+            height=None,
+            seed=None,
+            style=None,
+            init_image_path=None,
+            strength=None,
+            output_subdir="default",
+        )
+    assert exc.value.code == E_BAD_ARG
+    assert "does not support negative_prompt" in str(exc.value)
+
+
+async def test_generate_nan_steps_rejected(tmp_path: Path):
+    """NaN would slip through naive bound comparisons and crash int()."""
+    s = _settings(tmp_path)
+    with pytest.raises(MCPError) as exc:
+        await generate_image_tool(
+            settings=s,
+            prompt="a cat",
+            model=None,
+            preset=None,
+            steps=float("nan"),
+            width=None,
+            height=None,
+            seed=None,
+            style=None,
+            init_image_path=None,
+            strength=None,
+            output_subdir="default",
+        )
+    assert exc.value.code == E_BAD_ARG
+
+
+async def test_generate_nan_guidance_rejected(tmp_path: Path):
+    s = _settings(tmp_path, allowed_generation_models=("zimage",))
+    with pytest.raises(MCPError) as exc:
+        await generate_image_tool(
+            settings=s,
+            prompt="a cat",
+            model="zimage",
+            preset=None,
+            guidance=float("nan"),
+            width=None,
+            height=None,
+            seed=None,
+            style=None,
+            init_image_path=None,
+            strength=None,
+            output_subdir="default",
+        )
+    assert exc.value.code == E_BAD_ARG
 
 
 async def test_generate_negative_prompt_absent_not_forwarded(

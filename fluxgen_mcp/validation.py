@@ -136,7 +136,9 @@ def resolve_steps(steps: int | None, settings: MCPSettings) -> int | None:
     """
     if steps is None:
         return None
-    if steps < 1 or steps > settings.max_steps:
+    # ``not (lo <= v <= hi)`` (rather than two failed bounds comparisons)
+    # so NaN is rejected instead of falling through to ``int(nan)``.
+    if not (1 <= steps <= settings.max_steps):
         raise MCPError(
             E_BAD_ARG,
             f"steps must be in [1, {settings.max_steps}]; got {steps}",
@@ -159,7 +161,8 @@ def resolve_guidance(guidance: float | None) -> float | None:
     """
     if guidance is None:
         return None
-    if guidance <= 0 or guidance > MAX_GUIDANCE:
+    # NaN-safe: NaN fails both naive comparisons but is caught here.
+    if not (0 < guidance <= MAX_GUIDANCE):
         raise MCPError(
             E_BAD_ARG,
             f"guidance must be in (0, {MAX_GUIDANCE}]; got {guidance}",

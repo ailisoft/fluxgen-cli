@@ -81,12 +81,16 @@ _GENERATE = frozenset({"generate"})
 _EDIT = frozenset({"edit"})
 
 MODELS: dict[str, ModelSpec] = {
+    # z-image-turbo runs guidance-free (mflux coerces guidance to 0.0 and
+    # skips negative encoding entirely), so negative_prompt would be a
+    # guaranteed silent no-op — flagged unsupported despite the mflux
+    # signature accepting the kwarg.
     "zimage-turbo": ModelSpec(
         name="zimage-turbo",
         capabilities=_GENERATE,
         steps=4,
         guidance=None,
-        supports_negative_prompt=True,
+        supports_negative_prompt=False,
         factory=_make_zimage_turbo,
     ),
     "zimage": ModelSpec(
@@ -114,7 +118,8 @@ MODELS: dict[str, ModelSpec] = {
     # Krea 2 Turbo: timestep-distilled to 8 steps (CFG 1.0). Generation-only;
     # there is no mflux edit checkpoint, so it must not appear under ``edit``.
     # Recommend ``--steps 8`` — the shared presets (5/9/16) predate its
-    # distillation and are not its sweet spot.
+    # distillation and are not its sweet spot. negative_prompt only engages
+    # when guidance > 1.0 is also passed (CFG is off at 1.0).
     "krea2": ModelSpec(
         name="krea2",
         capabilities=_GENERATE,
