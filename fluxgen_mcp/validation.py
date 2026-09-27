@@ -156,15 +156,19 @@ MAX_GUIDANCE = 20.0
 def resolve_guidance(guidance: float | None) -> float | None:
     """Validate a caller-supplied guidance scale. ``None`` = not requested.
 
-    Bounded to ``(0, MAX_GUIDANCE]``: guidance multiplies sampler compute,
-    so an untrusted caller must not request arbitrary values.
+    Bounded to ``[1.0, MAX_GUIDANCE]``. The ceiling exists because guidance
+    multiplies sampler compute (an untrusted caller must not request
+    arbitrary values); the 1.0 floor exists because most samplers skip CFG
+    at ``<= 1.0`` — a caller passing 0.5 would get identical output to 1.0
+    and be misled about what ran. (krea2's sampler does engage below 1.0,
+    but sub-1.0 CFG is off-label and rejected uniformly.)
     """
     if guidance is None:
         return None
     # NaN-safe: NaN fails both naive comparisons but is caught here.
-    if not (0 < guidance <= MAX_GUIDANCE):
+    if not (1.0 <= guidance <= MAX_GUIDANCE):
         raise MCPError(
             E_BAD_ARG,
-            f"guidance must be in (0, {MAX_GUIDANCE}]; got {guidance}",
+            f"guidance must be in [1.0, {MAX_GUIDANCE}]; got {guidance}",
         )
     return float(guidance)

@@ -669,3 +669,74 @@ async def test_generate_negative_prompt_with_guidance_gt_1_passes(
     )
     assert mock_generate[0]["guidance"] == 1.5
     assert mock_generate[0]["negative_prompt"] == "blurry"
+
+
+async def test_generate_guidance_below_one_rejected(tmp_path: Path):
+    """Sub-1.0 guidance is rejected: most samplers skip CFG at <= 1.0, so
+    0.5 would produce identical output to 1.0 and mislead the caller."""
+    s = _settings(tmp_path, allowed_generation_models=("zimage",))
+    with pytest.raises(MCPError) as exc:
+        await generate_image_tool(
+            settings=s,
+            prompt="a cat",
+            model="zimage",
+            preset=None,
+            guidance=0.5,
+            width=None,
+            height=None,
+            seed=None,
+            style=None,
+            init_image_path=None,
+            strength=None,
+            output_subdir="default",
+        )
+    assert exc.value.code == E_BAD_ARG
+    assert "guidance must be in [1.0, 20.0]" in str(exc.value)
+
+
+async def test_generate_guidance_exactly_1_without_negative_prompt_passes(
+    tmp_path: Path, mock_generate
+):
+    """Boundary: guidance=1.0 alone is a valid explicit no-CFG request."""
+    s = _settings(tmp_path, allowed_generation_models=("zimage",))
+    await generate_image_tool(
+        settings=s,
+        prompt="a cat",
+        model="zimage",
+        preset=None,
+        guidance=1.0,
+        width=None,
+        height=None,
+        seed=None,
+        style=None,
+        init_image_path=None,
+        strength=None,
+        output_subdir="default",
+    )
+    assert mock_generate[0]["guidance"] == 1.0
+
+
+async def test_generate_guidance_exactly_1_with_negative_prompt_rejected(
+    tmp_path: Path,
+):
+    """Boundary: negative_prompt at effective guidance 1.0 is a silent
+    no-op (mflux skips negative encoding at <= 1.0) — rejected."""
+    s = _settings(tmp_path, allowed_generation_models=("zimage",))
+    with pytest.raises(MCPError) as exc:
+        await generate_image_tool(
+            settings=s,
+            prompt="a cat",
+            model="zimage",
+            preset=None,
+            guidance=1.0,
+            negative_prompt="blurry",
+            width=None,
+            height=None,
+            seed=None,
+            style=None,
+            init_image_path=None,
+            strength=None,
+            output_subdir="default",
+        )
+    assert exc.value.code == E_BAD_ARG
+    assert "guidance > 1.0" in str(exc.value)

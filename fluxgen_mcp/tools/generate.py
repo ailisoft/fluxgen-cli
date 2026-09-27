@@ -167,8 +167,10 @@ async def generate_image_tool(
             )
         # Even on supported models, negative encoding only runs when CFG
         # is active: mflux skips it at guidance <= 1.0 (z-image) / at
-        # guidance == 1.0 (krea2, whose spec default is 1.0). Effective
-        # guidance mirrors the generator's resolution: explicit beats spec.
+        # guidance == 1.0 (krea2, whose spec default is 1.0). Sub-1.0
+        # guidance is already rejected by resolve_guidance, so this guard
+        # only ever fires at exactly 1.0. Effective guidance mirrors the
+        # generator's resolution: explicit beats spec.
         effective_guidance = (
             final_guidance if final_guidance is not None else target_spec.guidance
         )
