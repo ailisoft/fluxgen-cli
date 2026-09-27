@@ -11,15 +11,11 @@ dependencies = [
     "mflux>=0.20.0",
     "wonderwords",
     "pillow",
-    "mcp[cli]>=2.0,<3.0",
-    "pydantic>=2.7",
 ]
 requires-python = ">=3.10"
 readme = "README.md"
 
 [project.optional-dependencies]
-# Kept as a no-op alias: mcp/pydantic are core deps now, but
-# `fluxgen-cli[mcp]` must keep resolving.
 mcp = [
     "mcp[cli]>=2.0,<3.0",
     "pydantic>=2.7",

@@ -350,8 +350,10 @@ def handle_generate(args, config, interactive=False):
         # Quantization: explicit --quantize → per-model default → preset.
         # The resolved value is written back into the preset so the
         # preloaded model and generate_image agree on the cache key.
+        # ``args.quantize or None`` keeps the historical "0 means unset"
+        # handling (0 is not a valid MLX quantization level).
         preset["quantize"] = resolve_quantize(
-            get_model_spec(args.model), preset, args.quantize
+            get_model_spec(args.model), preset, args.quantize or None
         )
 
         output_path = resolve_output_path(args.output, args.output_dir)

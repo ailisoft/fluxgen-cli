@@ -90,16 +90,19 @@ Caveats:
 #### Qwen-Image-2.1 (`--model qwen21`)
 
 `qwen21` runs [Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1), a 7B single-stream
-block-causal DiT with a Qwen3-VL text encoder. Defaults to 40 steps, guidance-free (fluxgen
-never passes `--guidance` for this model) and `-q 4` weights — no flags needed:
+block-causal DiT with a Qwen3-VL text encoder. It is guidance-free (fluxgen never passes
+`--guidance` for this model) and defaults to `-q 4` weights. Recommended invocation:
 
 ```bash
-fluxgen gen "A photograph of a red fox in a sunlit forest" --model qwen21
+fluxgen gen "A photograph of a red fox in a sunlit forest" --model qwen21 --steps 40
 ```
 
 Caveats:
 
 - Requires `mflux >= 0.20.0` (the `qwen21` module landed upstream there).
+- The shared presets (`fast` 5 / `standard` 9 / `quality` 16 steps) predate this model's
+  recommended sampling and are not its sweet spot — pass `--steps 40` (or your own value)
+  explicitly for best quality.
 - First run downloads ~33 GB of bf16 weights. The Qwen3-VL text encoder (~17.5 GB bf16) is
   **never quantized** and stays resident regardless of `-q`; the default `-q 4` keeps the
   transformer at ~4 GB so budget roughly ~24 GB+ of unified memory. Pass `-q 8` (or bf16)
