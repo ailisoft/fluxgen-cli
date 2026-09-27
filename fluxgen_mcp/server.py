@@ -305,7 +305,8 @@ def build_server(settings: MCPSettings) -> MCPServer:
             "(overrides the preset, capped by the server's max_steps), "
             "guidance (1.0-20.0; rejected for guidance-free models), and "
             "negative_prompt (same content filter as the prompt; requires "
-            "guidance > 1.0). Output is written under the configured "
+            "effective guidance > 1.0 — a model default above 1.0 counts). "
+            "Output is written under the configured "
             "sandbox root."
         ),
     )

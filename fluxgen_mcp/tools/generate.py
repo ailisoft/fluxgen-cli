@@ -33,7 +33,13 @@ from fluxgen.models import MODELS, get_model_spec
 from fluxgen.presets import PRESETS, PRESETS_BY_NAME
 
 from fluxgen_mcp.config import MCPSettings
-from fluxgen_mcp.errors import E_BAD_ARG, E_MODEL, MCPError, EXCEPTION_MAP
+from fluxgen_mcp.errors import (
+    E_BAD_ARG,
+    E_MODEL,
+    E_PROMPT_REJECTED,
+    MCPError,
+    EXCEPTION_MAP,
+)
 from fluxgen_mcp.safety import check_pause, resolve_sandbox_output, validate_prompt
 from fluxgen_mcp.validation import (
     resolve_guidance,
@@ -157,7 +163,16 @@ async def generate_image_tool(
     if negative_prompt is not None:
         if not isinstance(negative_prompt, str):
             raise MCPError(E_BAD_ARG, "negative_prompt must be a string")
-        validate_prompt(settings, negative_prompt)
+        try:
+            validate_prompt(settings, negative_prompt)
+        except MCPError as exc:
+            # Same code and policy as the prompt filter, but the message
+            # must not claim the (clean) prompt was rejected.
+            if exc.code == E_PROMPT_REJECTED:
+                raise MCPError(
+                    E_PROMPT_REJECTED, "negative_prompt rejected by content filter"
+                ) from exc
+            raise
         if not target_spec.supports_negative_prompt:
             raise MCPError(
                 E_BAD_ARG,
