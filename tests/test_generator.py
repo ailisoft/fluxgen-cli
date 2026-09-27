@@ -358,3 +358,118 @@ def test_generate_image_applies_qwen21_default_quantize(tmp_path):
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ── explicit steps / guidance / negative_prompt (MCP surface) ──────────────────
+
+
+def test_resolve_inference_params_guidance_free_spec_blocks_all_guidance():
+    """Guidance-free specs (turbo variants) ignore explicit and preset
+    guidance alike — mflux would silently coerce it to 0.0, so honoring
+    the kwarg would make a caller believe CFG applied when it did not."""
+    spec = get_model_spec("zimage-turbo")  # guidance=None (turbo)
+    assert resolve_inference_params(spec, guidance=2.0, preset={"steps": 4}) == (4, None)
+    _, preset_blocked = resolve_inference_params(
+        spec, preset={"steps": None, "guidance": 3.5}
+    )
+    assert preset_blocked is None
+
+
+def test_generate_image_explicit_steps_and_guidance_override_preset(tmp_path):
+    """MCP callers can pin steps/guidance per call, beating the preset."""
+    from fluxgen.generator import generate_image
+
+    mock_model = MagicMock()
+    mock_result = MagicMock()
+    mock_result.image = MagicMock()
+    mock_model.generate_image.return_value = mock_result
+
+    generate_image(
+        prompt="a fox",
+        preset={"steps": 5, "guidance": None, "quantize": 8},
+        seed=1,
+        output=str(tmp_path / "out.png"),
+        width=64,
+        height=64,
+        style="none",
+        model_name="zimage",
+        steps=7,
+        guidance=2.5,
+        model=mock_model,
+    )
+
+    kwargs = mock_model.generate_image.call_args.kwargs
+    assert kwargs["num_inference_steps"] == 7
+    assert kwargs["guidance"] == 2.5
+
+
+def test_generate_image_negative_prompt_passthrough_including_empty(tmp_path):
+    """An explicit empty string is forwarded verbatim (mflux substitutes a
+    space for it, so it is behaviorally identical to omission — but the
+    caller's explicit value must not be second-guessed here)."""
+    from fluxgen.generator import generate_image
+
+    mock_model = MagicMock()
+    mock_result = MagicMock()
+    mock_result.image = MagicMock()
+    mock_model.generate_image.return_value = mock_result
+
+    generate_image(
+        prompt="a fox",
+        preset={"steps": None, "guidance": None, "quantize": 8},
+        seed=1,
+        output=str(tmp_path / "out.png"),
+        width=64,
+        height=64,
+        style="none",
+        model_name="zimage",
+        negative_prompt="",
+        model=mock_model,
+    )
+
+    assert mock_model.generate_image.call_args.kwargs["negative_prompt"] == ""
+
+
+def test_generate_image_negative_prompt_absent_not_forwarded(tmp_path):
+    """No negative_prompt kwarg must reach models that were not asked for one."""
+    from fluxgen.generator import generate_image
+
+    mock_model = MagicMock()
+    mock_result = MagicMock()
+    mock_result.image = MagicMock()
+    mock_model.generate_image.return_value = mock_result
+
+    generate_image(
+        prompt="a fox",
+        preset={"steps": None, "guidance": None, "quantize": 8},
+        seed=1,
+        output=str(tmp_path / "out.png"),
+        width=64,
+        height=64,
+        style="none",
+        model_name="zimage",
+        model=mock_model,
+    )
+
+    assert "negative_prompt" not in mock_model.generate_image.call_args.kwargs
+
+
+def test_generate_image_rejects_negative_prompt_for_unsupported_model(tmp_path):
+    """Flux.2 Klein's generate_image has no negative_prompt kwarg; the
+    generator must reject up front with a clear error, not let a
+    TypeError escape from inside mflux."""
+    from fluxgen.generator import generate_image
+
+    with pytest.raises(ValueError, match="does not support negative_prompt"):
+        generate_image(
+            prompt="a fox",
+            preset={"steps": None, "guidance": None, "quantize": 8},
+            seed=1,
+            output=str(tmp_path / "out.png"),
+            width=64,
+            height=64,
+            style="none",
+            model_name="flux2-klein4b",
+            negative_prompt="blurry",
+            model=MagicMock(),
+        )

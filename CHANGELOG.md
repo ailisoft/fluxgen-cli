@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Added per-call `steps`, `guidance`, and `negative_prompt` parameters to the MCP
+  `generate_image` tool. `steps` is capped by the existing `max_steps` setting and overrides
+  the preset (lets agents run beyond preset step counts); `guidance` is bounded to `[1.0, 20]`
+  and rejected for guidance-free models (turbo variants silently ignore CFG, so honoring it
+  would mislead callers); values below 1.0 are rejected as well because most samplers skip
+  CFG at `<= 1.0`; `negative_prompt` shares the prompt content filter and is rejected
+  up front for models that would silently ignore it (Flux.2 Klein lacks the sampler input;
+  the guidance-free turbo variants never encode a negative; models whose effective guidance
+  is ≤ 1.0 skip negative encoding, so `guidance` > 1.0 is required alongside it) — an empty
+  string is a valid explicit value, and a supplied `negative_prompt` is now recorded in the
+  audit log like the prompt. The result dict reports the effective `steps`. Internals: step/guidance
+  validation moved to shared `validation.resolve_steps`/`resolve_guidance` used by both
+  tools; new `ModelSpec.supports_negative_prompt` flag.
 - `qwen21` now defaults to 4-bit weights (`default_quantize=4` on the model spec). Quantization
   resolution is explicit `--quantize` → per-model default → preset → bf16; a model default
   overrides the preset value because presets encode choices made before the model existed,

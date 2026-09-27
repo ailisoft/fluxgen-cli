@@ -148,6 +148,7 @@ def build_server(settings: MCPSettings) -> MCPServer:
         prompt: str,
         body,
         ctx: Context | None,
+        negative_prompt: str | None = None,
     ):
         """Run a tool body inside the safety envelope.
 
@@ -176,6 +177,7 @@ def build_server(settings: MCPSettings) -> MCPServer:
                 make_audit_record(
                     tool=tool_name,
                     prompt=prompt,
+                    negative_prompt=negative_prompt,
                     model=None,
                     seed=None,
                     started_at=time.perf_counter(),
@@ -200,6 +202,7 @@ def build_server(settings: MCPSettings) -> MCPServer:
                     make_audit_record(
                         tool=tool_name,
                         prompt=prompt,
+                        negative_prompt=negative_prompt,
                         model=None,
                         seed=None,
                         started_at=started,
@@ -220,6 +223,7 @@ def build_server(settings: MCPSettings) -> MCPServer:
                     make_audit_record(
                         tool=tool_name,
                         prompt=prompt,
+                        negative_prompt=negative_prompt,
                         model=None,
                         seed=None,
                         started_at=started,
@@ -239,6 +243,7 @@ def build_server(settings: MCPSettings) -> MCPServer:
                     make_audit_record(
                         tool=tool_name,
                         prompt=prompt,
+                        negative_prompt=negative_prompt,
                         model=meta.get("model"),
                         seed=meta.get("seed"),
                         started_at=started,
@@ -255,6 +260,7 @@ def build_server(settings: MCPSettings) -> MCPServer:
                     make_audit_record(
                         tool=tool_name,
                         prompt=prompt,
+                        negative_prompt=negative_prompt,
                         model=None,
                         seed=None,
                         started_at=started,
@@ -272,6 +278,7 @@ def build_server(settings: MCPSettings) -> MCPServer:
                 make_audit_record(
                     tool=tool_name,
                     prompt=prompt,
+                    negative_prompt=negative_prompt,
                     model=result.get("model"),
                     seed=result.get("seed"),
                     started_at=started,
@@ -294,14 +301,22 @@ def build_server(settings: MCPSettings) -> MCPServer:
     @server.tool(
         name="generate_image",
         description=(
-            "Generate an image from a text prompt. Output is written under "
-            "the configured sandbox root."
+            "Generate an image from a text prompt. Supports per-call steps "
+            "(overrides the preset, capped by the server's max_steps), "
+            "guidance (1.0-20.0; rejected for guidance-free models), and "
+            "negative_prompt (same content filter as the prompt; requires "
+            "effective guidance > 1.0 — a model default above 1.0 counts). "
+            "Output is written under the configured "
+            "sandbox root."
         ),
     )
     async def generate_image(
         prompt: str,
         model: str | None = None,
         preset: str | None = None,
+        steps: int | None = None,
+        guidance: float | None = None,
+        negative_prompt: str | None = None,
         width: int | None = None,
         height: int | None = None,
         seed: int | None = None,
@@ -317,6 +332,9 @@ def build_server(settings: MCPSettings) -> MCPServer:
                 prompt=prompt,
                 model=model,
                 preset=preset,
+                steps=steps,
+                guidance=guidance,
+                negative_prompt=negative_prompt,
                 width=width,
                 height=height,
                 seed=seed,
@@ -326,7 +344,9 @@ def build_server(settings: MCPSettings) -> MCPServer:
                 output_subdir=output_subdir,
             )
 
-        return await _with_safety("generate_image", prompt, _body, ctx)
+        return await _with_safety(
+            "generate_image", prompt, _body, ctx, negative_prompt=negative_prompt
+        )
 
     @server.tool(
         name="edit_image",

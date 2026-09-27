@@ -33,7 +33,11 @@ from fluxgen.models import (
 from fluxgen_mcp.config import MCPSettings
 from fluxgen_mcp.errors import E_BAD_ARG, E_MODEL, MCPError, EXCEPTION_MAP
 from fluxgen_mcp.safety import check_pause, resolve_sandbox_output, validate_prompt
-from fluxgen_mcp.validation import validate_edit_inputs
+from fluxgen_mcp.validation import (
+    resolve_guidance as _resolve_guidance,
+    resolve_steps as _resolve_steps,
+    validate_edit_inputs,
+)
 
 logger = logging.getLogger("fluxgen-mcp")
 
@@ -66,25 +70,6 @@ def _edit_filename() -> str:
     the audit log for traceability.
     """
     return generate_random_filename()
-
-
-def _resolve_steps(steps: int | None, settings: MCPSettings) -> int | None:
-    if steps is None:
-        return None
-    if steps < 1 or steps > settings.max_steps:
-        raise MCPError(
-            E_BAD_ARG,
-            f"steps must be in [1, {settings.max_steps}]; got {steps}",
-        )
-    return int(steps)
-
-
-def _resolve_guidance(guidance: float | None) -> float | None:
-    if guidance is None:
-        return None
-    if guidance <= 0:
-        raise MCPError(E_BAD_ARG, f"guidance must be > 0; got {guidance}")
-    return float(guidance)
 
 
 def _resolve_dim(d: int | None, settings: MCPSettings, axis: str) -> int | None:

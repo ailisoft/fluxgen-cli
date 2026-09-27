@@ -29,6 +29,11 @@ class ModelSpec:
     # a higher-priority source names one. ``None`` keeps the historical
     # behavior (preset quantize wins, else bf16).
     default_quantize: int | None = None
+    # Whether the model's ``generate_image`` accepts a
+    # ``negative_prompt`` kwarg (true-CFG / negative-conditioning
+    # models). Flux.2 Klein's signature lacks it, so callers must
+    # not pass one there.
+    supports_negative_prompt: bool = False
 
 
 def _make_zimage(quantize: int | None):
@@ -90,11 +95,16 @@ _GENERATE = frozenset({"generate"})
 _EDIT = frozenset({"edit"})
 
 MODELS: dict[str, ModelSpec] = {
+    # z-image-turbo runs guidance-free (mflux coerces guidance to 0.0 and
+    # skips negative encoding entirely), so negative_prompt would be a
+    # guaranteed silent no-op — flagged unsupported despite the mflux
+    # signature accepting the kwarg.
     "zimage-turbo": ModelSpec(
         name="zimage-turbo",
         capabilities=_GENERATE,
         steps=4,
         guidance=None,
+        supports_negative_prompt=False,
         factory=_make_zimage_turbo,
     ),
     "zimage": ModelSpec(
@@ -102,6 +112,7 @@ MODELS: dict[str, ModelSpec] = {
         capabilities=_GENERATE,
         steps=20,
         guidance=4.0,
+        supports_negative_prompt=True,
         factory=_make_zimage,
     ),
     "flux2-klein4b": ModelSpec(
@@ -121,12 +132,15 @@ MODELS: dict[str, ModelSpec] = {
     # Krea 2 Turbo: timestep-distilled to 8 steps (CFG 1.0). Generation-only;
     # there is no mflux edit checkpoint, so it must not appear under ``edit``.
     # Recommend ``--steps 8`` — the shared presets (5/9/16) predate its
-    # distillation and are not its sweet spot.
+    # distillation and are not its sweet spot. negative_prompt engages only
+    # when guidance differs from 1.0 (mflux skips it at the 1.0 default),
+    # so the MCP layer requires guidance > 1.0 alongside it.
     "krea2": ModelSpec(
         name="krea2",
         capabilities=_GENERATE,
         steps=8,
         guidance=1.0,
+        supports_negative_prompt=True,
         factory=_make_krea2,
     ),
     "flux2-klein-edit": ModelSpec(
@@ -217,6 +231,12 @@ def resolve_inference_params(
 
     Priority (highest to lowest): explicit kwargs → ``preset`` values
     (when the key is present and not ``None``) → ``ModelSpec`` defaults.
+
+    One exception to the plain priority chain: a guidance-free spec
+    (``guidance=None``, e.g. turbo variants) ignores *all* guidance —
+    preset values and explicit kwargs alike. mflux silently coerces
+    guidance to 0.0 for such models, so honoring the kwarg would make
+    a caller believe CFG applied when it did not.
 
     ``Preset`` dataclasses always serialize ``guidance: None``, so a
     plain ``dict.get("guidance", default)`` would incorrectly skip

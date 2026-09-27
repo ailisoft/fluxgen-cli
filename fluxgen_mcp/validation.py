@@ -5,7 +5,9 @@ MCP-specific bounds (size cap, dimension cap) and emits `MCPError`
 on rejection. The base validator raises `fluxgen.exceptions` which
 the tool layer maps via `EXCEPTION_MAP`; the size and dimension
 checks raise `MCPError` directly because they are MCP-policy
-overrides on top of the underlying image validity.
+overrides on top of the underlying image validity. Shared inference
+parameter resolvers (`resolve_steps`, `resolve_guidance`) also live
+here so both tools validate identically.
 """
 from __future__ import annotations
 
@@ -13,6 +15,7 @@ import os
 from pathlib import Path
 
 from fluxgen.image_validation import validate_image_file
+from fluxgen_mcp.config import MCPSettings
 from fluxgen_mcp.errors import (
     E_BAD_ARG,
     E_INVALID_INPUT_IMAGE,
@@ -122,3 +125,50 @@ def validate_init_image(
     """
     result = validate_edit_inputs([path], max_bytes=max_bytes, max_dimension=max_dimension)
     return result[0]
+
+
+def resolve_steps(steps: int | None, settings: MCPSettings) -> int | None:
+    """Validate a caller-supplied inference step count.
+
+    ``None`` means "not requested" (preset/spec defaults apply). Valid
+    range is ``[1, settings.max_steps]`` — the same ceiling the preset
+    path is checked against.
+    """
+    if steps is None:
+        return None
+    # ``not (lo <= v <= hi)`` (rather than two failed bounds comparisons)
+    # so NaN is rejected instead of falling through to ``int(nan)``.
+    if not (1 <= steps <= settings.max_steps):
+        raise MCPError(
+            E_BAD_ARG,
+            f"steps must be in [1, {settings.max_steps}]; got {steps}",
+        )
+    return int(steps)
+
+
+# Upper bound for caller-supplied guidance. Real checkpoints live in
+# 1.0-10.0; anything beyond is a denial-of-service-grade compute request
+# (each CFG pass re-runs the text encoder + transformer), not a
+# meaningful sampling parameter.
+MAX_GUIDANCE = 20.0
+
+
+def resolve_guidance(guidance: float | None) -> float | None:
+    """Validate a caller-supplied guidance scale. ``None`` = not requested.
+
+    Bounded to ``[1.0, MAX_GUIDANCE]``. The ceiling exists because guidance
+    multiplies sampler compute (an untrusted caller must not request
+    arbitrary values); the 1.0 floor exists because most samplers skip CFG
+    at ``<= 1.0`` — a caller passing 0.5 would get identical output to 1.0
+    and be misled about what ran. (krea2's sampler does engage below 1.0,
+    but sub-1.0 CFG is off-label and rejected uniformly.)
+    """
+    if guidance is None:
+        return None
+    # NaN-safe: NaN fails both naive comparisons but is caught here.
+    if not (1.0 <= guidance <= MAX_GUIDANCE):
+        raise MCPError(
+            E_BAD_ARG,
+            f"guidance must be in [1.0, {MAX_GUIDANCE}]; got {guidance}",
+        )
+    return float(guidance)
