@@ -3,7 +3,7 @@
 `fluxgen-cli` is a small Python CLI with two image workflows, both
 backed by `mflux` on Apple Silicon (MLX):
 
-- generation (`zimage*`, `flux2-klein*`, `krea2`)
+- generation (`zimage*`, `flux2-klein*`, `krea2`, `qwen21`)
 - instruction editing (`flux2-klein-edit`)
 
 ## Entry Point
@@ -21,7 +21,9 @@ For backward compatibility, any first argument that is not a known subcommand is
 
 All model IDs, capabilities, and default inference params live in
 `fluxgen/models.py`. CLI choices, MCP allowlists, and inference
-helpers derive from that single registry.
+helpers derive from that single registry. Quantization resolves as
+explicit `--quantize` → per-model `default_quantize` → preset value →
+bf16 (`resolve_quantize`).
 
 ## Generation Flow
 
@@ -56,9 +58,13 @@ Supported generation backends:
 - `flux2-klein4b`
 - `flux2-klein9b`
 - `krea2` (Krea 2 Turbo; 8-step distilled, ~33 GB download, ~32 GB+ unified memory)
+- `qwen21` (Qwen-Image-2.1; 40-step guidance-free, ~33 GB download, ~46 GB peak —
+  needs `mflux >= 0.20.0`)
 
 `krea2` is generation-only — there is no mflux edit checkpoint, so it is not
-registered under `fluxgen edit`.
+registered under `fluxgen edit`. `qwen21` is generation-only too: upstream
+ships a `QwenImage21Edit` variant, but its signature (multi-`image_paths`,
+`output_resolution`, no `image_strength`) does not fit the editor contract.
 
 ## Editing Flow
 

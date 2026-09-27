@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- `qwen21` now defaults to 4-bit weights (`default_quantize=4` on the model spec). Quantization
+  resolution is explicit `--quantize` → per-model default → preset → bf16; a model default
+  overrides the preset value because presets encode choices made before the model existed,
+  while the spec default encodes its memory profile (the ~17.5 GB bf16 text encoder is never
+  quantized, so q4 keeps total peak around ~24 GB instead of ~46 GB). Wired through the CLI
+  preload, the model-less `generate_image` path (MCP), and `ImageEditor.load`.
+- Clarified `qwen21` edit status: upstream mflux 0.20.0 ships **txt2img only** — the
+  `QwenImage21Edit` multi-reference/RGBA variant exists only on GitHub main and is unreleased,
+  so editing remains on `flux2-klein-edit` (tracked in ROADMAP).
+- Added `qwen21` (Qwen-Image-2.1) as a generation-only model: 7B single-stream block-causal
+  DiT with a Qwen3-VL text encoder, 40-step guidance-free sampling (CFG 1.0). ~33 GB first-run
+  download. Presets carrying `guidance` are ignored for this model (true CFG upstream needs a
+  negative prompt, which fluxgen does not plumb).
+- Bumped `mflux` floor to `>=0.20.0` (Qwen-Image-2.1 support landed upstream there; 0.19.x
+  ships only the older Qwen-Image stack).
 - Added `krea2` (Krea 2 Turbo) as a generation-only model: 8-step-distilled, CFG 1.0,
   ~33 GB first-run download (~32 GB+ unified memory recommended). Use `--steps 8 -q 8`;
   the shared presets (5/9/16 steps) predate its distillation and are not its sweet spot.

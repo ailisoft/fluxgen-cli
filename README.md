@@ -2,7 +2,7 @@
 
 A CLI and Interactive REPL for local AI image generation and instruction-based image editing on macOS using mflux.
 
-- **Generate images** using state-of-the-art `mflux` backends: `zimage-turbo`, `zimage`, `flux2-klein4b`, `flux2-klein9b`, and `krea2` (Krea 2 Turbo).
+- **Generate images** using state-of-the-art `mflux` backends: `zimage-turbo`, `zimage`, `flux2-klein4b`, `flux2-klein9b`, `krea2` (Krea 2 Turbo), and `qwen21` (Qwen-Image-2.1).
 - **Edit images** via natural language instructions using `flux2-klein-edit` (multi-image support).
 - **Interactive REPL Mode** to keep models cached persistently in memory for near-instant successive runs.
 - **Robust Path Security & Validation** protecting against directory traversal and corrupted image inputs.
@@ -87,6 +87,32 @@ Caveats:
 - `--init-image` uses strength-based img2img (VAE encode + denoise). It is **not** Krea's
   hosted style-reference path, which this CLI does not support.
 
+#### Qwen-Image-2.1 (`--model qwen21`)
+
+`qwen21` runs [Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1), a 7B single-stream
+block-causal DiT with a Qwen3-VL text encoder. Defaults to 40 steps, guidance-free (fluxgen
+never passes `--guidance` for this model) and `-q 4` weights — no flags needed:
+
+```bash
+fluxgen gen "A photograph of a red fox in a sunlit forest" --model qwen21
+```
+
+Caveats:
+
+- Requires `mflux >= 0.20.0` (the `qwen21` module landed upstream there).
+- First run downloads ~33 GB of bf16 weights. The Qwen3-VL text encoder (~17.5 GB bf16) is
+  **never quantized** and stays resident regardless of `-q`; the default `-q 4` keeps the
+  transformer at ~4 GB so budget roughly ~24 GB+ of unified memory. Pass `-q 8` (or bf16)
+  for maximum fidelity — upstream measures bf16 as both the fastest and most accurate path,
+  peaking around ~46 GB (64 GB machines).
+- `--quantize` always wins over this model's q4 default; the shared presets' quantize values
+  are ignored for it.
+- True CFG exists upstream but requires a negative prompt, which this CLI does not plumb;
+  presets carrying `guidance` are ignored for this model.
+- `--init-image` uses strength-based img2img. The upstream multi-reference / RGBA editing
+  variant (`QwenImage21Edit`) is **not available yet** — it exists only on mflux's GitHub
+  main, unreleased as of 0.20.0, so editing stays on `flux2-klein-edit`.
+
 ### 2. Instruction-Based Image Editing
 
 The `edit` command uses `flux2-klein-edit` (MLX). **Supports editing multiple input images at once.**
@@ -135,7 +161,7 @@ fluxgen> help
 - `-v`, `--verbose`: Show debug output and full error tracebacks.
 
 ### Generation Options (`generate`, `gen`)
-- `--model [zimage-turbo|zimage|flux2-klein4b|flux2-klein9b|krea2]`: Model backend to use (default: `zimage-turbo`).
+- `--model [zimage-turbo|zimage|flux2-klein4b|flux2-klein9b|krea2|qwen21]`: Model backend to use (default: `zimage-turbo`).
 - `-0`, `--fast`: Fast preset (fewer steps).
 - `-3`, `--standard`: Standard preset.
 - `-8`, `--quality`: Quality preset (higher steps).
@@ -252,7 +278,7 @@ max_prompt_chars = 2000
 max_concurrent_jobs = 1
 max_queue_depth = 4
 per_call_timeout_s = 600
-allowed_generation_models = ["zimage-turbo", "zimage", "flux2-klein4b", "flux2-klein9b", "krea2"]
+allowed_generation_models = ["zimage-turbo", "zimage", "flux2-klein4b", "flux2-klein9b", "krea2", "qwen21"]
 allowed_edit_models = ["flux2-klein-edit"]
 prompt_blocklist = []
 audit_log_path = "~/.fluxgen-mcp-audit.log"

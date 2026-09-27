@@ -22,7 +22,7 @@ def load_cli_without_mflux():
     fake_generator = MagicMock()
     fake_generator.generate_image = MagicMock()
     fake_generator.generate_random_filename = MagicMock(return_value="fake.png")
-    fake_generator.SUPPORTED_MODELS = ["zimage-turbo", "zimage", "flux2-klein4b", "flux2-klein9b", "krea2"]
+    fake_generator.SUPPORTED_MODELS = ["zimage-turbo", "zimage", "flux2-klein4b", "flux2-klein9b", "krea2", "qwen21"]
     fake_generator.DEFAULT_MODEL = "zimage-turbo"
 
     # Ensure ``fluxgen.cli`` and its submodules are loaded at least
@@ -247,6 +247,60 @@ def test_handle_generate_resolution_large_dimensions():
     _, kwargs = mock_gen.call_args
     assert kwargs["width"] == 1024
     assert kwargs["height"] == 1024
+
+
+def test_handle_generate_qwen21_default_quantize_preload():
+    """qwen21 preloads at the spec's q4 default when no --quantize is passed."""
+    cli = load_cli_without_mflux()
+
+    with patch.object(cli, "load_config", return_value={}), \
+         patch("fluxgen.cli.commands.generate_image") as mock_gen, \
+         patch("fluxgen.cli.commands.ModelManager") as mock_mm:
+        mock_mm.get_model.return_value = MagicMock()
+
+        args = SimpleNamespace(
+            resolution=None, width=None, height=None,
+            prompt="a prompt", preset_idx=0, preset=None,
+            steps=None, quantize=None,
+            output=None, output_dir="output",
+            seed=None, style="none",
+            init_image=None, strength=0.4,
+            model="qwen21", verbose=False, silent=False,
+            timer=False,
+        )
+        cli.handle_generate(args, {})
+
+    preload_quantize = mock_mm.get_model.call_args.kwargs["quantize"]
+    assert preload_quantize == 4
+    _, kwargs = mock_gen.call_args
+    assert kwargs["preset"]["quantize"] == 4
+
+
+def test_handle_generate_explicit_quantize_beats_model_default():
+    """An explicit --quantize must override qwen21's q4 spec default."""
+    cli = load_cli_without_mflux()
+
+    with patch.object(cli, "load_config", return_value={}), \
+         patch("fluxgen.cli.commands.generate_image") as mock_gen, \
+         patch("fluxgen.cli.commands.ModelManager") as mock_mm:
+        mock_mm.get_model.return_value = MagicMock()
+
+        args = SimpleNamespace(
+            resolution=None, width=None, height=None,
+            prompt="a prompt", preset_idx=0, preset=None,
+            steps=None, quantize=8,
+            output=None, output_dir="output",
+            seed=None, style="none",
+            init_image=None, strength=0.4,
+            model="qwen21", verbose=False, silent=False,
+            timer=False,
+        )
+        cli.handle_generate(args, {})
+
+    preload_quantize = mock_mm.get_model.call_args.kwargs["quantize"]
+    assert preload_quantize == 8
+    _, kwargs = mock_gen.call_args
+    assert kwargs["preset"]["quantize"] == 8
 
 
 def test_handle_generate_resolution_aspect_ratio():
