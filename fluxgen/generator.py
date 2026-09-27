@@ -12,6 +12,7 @@ from fluxgen.models import (
     SUPPORTED_MODELS,
     require_capability,
     resolve_inference_params,
+    resolve_quantize,
 )
 from fluxgen.styling import StyleManager
 
@@ -116,7 +117,9 @@ def generate_image(
     if model is None:
         model = ModelManager.get_model(
             model_name=spec.name,
-            quantize=preset.get("quantize"),
+            # Spec default beats the preset value on this path: there is no
+            # explicit CLI flag here (MCP callers always send a stock preset).
+            quantize=resolve_quantize(spec, preset),
         )
 
     # Build generate_image kwargs — common across all models

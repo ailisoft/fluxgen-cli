@@ -25,6 +25,10 @@ class ModelSpec:
     # (e.g. guidance-free turbo variants).
     guidance: float | None
     factory: Callable[[int | None], Any]
+    # Quantization applied when neither the CLI ``--quantize`` flag nor
+    # a higher-priority source names one. ``None`` keeps the historical
+    # behavior (preset quantize wins, else bf16).
+    default_quantize: int | None = None
     # Whether the model's ``generate_image`` accepts a
     # ``negative_prompt`` kwarg (true-CFG / negative-conditioning
     # models). Flux.2 Klein's signature lacks it, so callers must
@@ -75,6 +79,16 @@ def _make_krea2(quantize: int | None):
     from mflux.models.krea2 import Krea2
 
     return Krea2(quantize=quantize, model_config=ModelConfig.krea2())
+
+
+def _make_qwen21(quantize: int | None):
+    # Qwen-Image-2.1 — 7B unified DiT with a Qwen3-VL text encoder.
+    # Requires mflux >= 0.20.0 (the qwen21 module landed upstream there);
+    # 0.19.x ships only the older Qwen-Image stack.
+    from mflux.models.common.config import ModelConfig
+    from mflux.models.qwen21.variants.txt2img.qwen_image_21 import QwenImage21
+
+    return QwenImage21(quantize=quantize, model_config=ModelConfig.qwen_image_21())
 
 
 _GENERATE = frozenset({"generate"})
@@ -135,6 +149,22 @@ MODELS: dict[str, ModelSpec] = {
         steps=4,
         guidance=1.0,
         factory=_make_flux2_klein_edit,
+    ),
+    # Qwen-Image-2.1: guidance-free by default (40 steps, CFG 1.0). True CFG
+    # exists upstream but needs a negative prompt fluxgen does not plumb, so
+    # ``guidance=None`` hard-disables it (same treatment as zimage-turbo).
+    # Generation-only for now: the upstream QwenImage21Edit signature
+    # (multi-image_paths, output_resolution, no image_strength) does not fit
+    # the editor contract. Defaults to 4-bit weights: the bf16 text encoder
+    # (~17.5 GB) stays resident either way, and q4 keeps the 7B transformer
+    # small enough for sub-64 GB machines.
+    "qwen21": ModelSpec(
+        name="qwen21",
+        capabilities=_GENERATE,
+        steps=40,
+        guidance=None,
+        default_quantize=4,
+        factory=_make_qwen21,
     ),
 }
 
@@ -230,6 +260,27 @@ def resolve_inference_params(
         resolved_guidance = spec.guidance
 
     return resolved_steps, resolved_guidance
+
+
+def resolve_quantize(
+    spec: ModelSpec,
+    preset: dict[str, Any] | None = None,
+    cli_quantize: int | None = None,
+) -> int | None:
+    """Resolve quantization: explicit flag → model default → preset → bf16.
+
+    Unlike steps/guidance, a model's ``default_quantize`` overrides the
+    preset value: presets carry quantize choices made before the model
+    existed (e.g. the shared 5/9/16-step presets), while the spec
+    default encodes this model's memory profile (qwen21 at bf16/q8
+    peaks ~46 GB because the text encoder is never quantized).
+    Explicit CLI ``--quantize`` always wins.
+    """
+    if cli_quantize is not None:
+        return cli_quantize
+    if spec.default_quantize is not None:
+        return spec.default_quantize
+    return (preset or {}).get("quantize")
 
 
 class ModelManager:

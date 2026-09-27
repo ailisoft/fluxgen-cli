@@ -35,7 +35,12 @@ from fluxgen.generator import (
     generate_image,
     generate_random_filename,
 )
-from fluxgen.models import DEFAULT_EDIT_MODEL, SUPPORTED_EDIT_MODELS
+from fluxgen.models import (
+    DEFAULT_EDIT_MODEL,
+    SUPPORTED_EDIT_MODELS,
+    get_model_spec,
+    resolve_quantize,
+)
 from fluxgen.presets import ALL_RESOLUTION_PRESETS, PRESETS, PRESETS_BY_NAME
 
 from fluxgen.cli.presets_arg import (
@@ -342,8 +347,14 @@ def handle_generate(args, config, interactive=False):
         preset = asdict(PRESETS[preset_idx])
         if args.steps:
             preset["steps"] = args.steps
-        if args.quantize:
-            preset["quantize"] = args.quantize
+        # Quantization: explicit --quantize → per-model default → preset.
+        # The resolved value is written back into the preset so the
+        # preloaded model and generate_image agree on the cache key.
+        # ``args.quantize or None`` keeps the historical "0 means unset"
+        # handling (0 is not a valid MLX quantization level).
+        preset["quantize"] = resolve_quantize(
+            get_model_spec(args.model), preset, args.quantize or None
+        )
 
         output_path = resolve_output_path(args.output, args.output_dir)
         width, height = resolve_image_dimensions(args, config)
@@ -450,7 +461,10 @@ def handle_edit(args, config=None, interactive=False):
         output_path = resolve_output_path(args.output, args.output_dir, generate_edit_filename)
 
         model_name = getattr(args, "model", DEFAULT_EDIT_MODEL)
-        quantize = getattr(args, "quantize", None)
+        # Same "0 means unset" normalization as the generate path: 0 is not
+        # a valid MLX quantization level and must not become an explicit
+        # ModelManager cache key.
+        quantize = getattr(args, "quantize", None) or None
         seed = getattr(args, "seed", None)
 
         editor = ImageEditor(model_name=model_name, quantize=quantize)

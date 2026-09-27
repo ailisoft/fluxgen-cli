@@ -258,6 +258,104 @@ def test_generate_image_passes_krea2_default_guidance(tmp_path):
     mock_result.image.save.assert_called_once()
 
 
+def test_qwen21_is_generate_only_with_guidance_free_defaults():
+    """Qwen-Image-2.1 is a 40-step guidance-free txt2img model on mflux >= 0.20.0."""
+    spec = get_model_spec("qwen21")
+    assert spec.capabilities == {"generate"}
+    assert spec.steps == 40
+    assert spec.guidance is None
+    assert spec.default_quantize == 4
+    assert "qwen21" not in SUPPORTED_EDIT_MODELS
+    with pytest.raises(ValueError, match="does not support edit"):
+        require_capability("qwen21", "edit")
+
+
+def test_resolve_inference_params_qwen21_ignores_preset_guidance():
+    """guidance=None specs must hard-disable guidance, even if a preset carries one."""
+    spec = get_model_spec("qwen21")
+    steps, guidance = resolve_inference_params(
+        spec,
+        preset={"steps": None, "guidance": 3.5, "quantize": 8},
+    )
+    assert steps == 40
+    assert guidance is None
+
+
+def test_generate_image_omits_guidance_for_qwen21(tmp_path):
+    """End-to-end: qwen21 never receives a guidance kwarg (mflux defaults CFG 1.0)."""
+    from fluxgen.generator import generate_image
+
+    mock_model = MagicMock()
+    mock_result = MagicMock()
+    mock_result.image = MagicMock()
+    mock_model.generate_image.return_value = mock_result
+
+    generate_image(
+        prompt="a fox",
+        preset={"steps": None, "guidance": None, "quantize": 8},
+        seed=1,
+        output=str(tmp_path / "out.png"),
+        width=64,
+        height=64,
+        style="none",
+        model_name="qwen21",
+        model=mock_model,
+    )
+
+    kwargs = mock_model.generate_image.call_args.kwargs
+    assert "guidance" not in kwargs
+    assert kwargs["num_inference_steps"] == 40
+    mock_result.image.save.assert_called_once()
+
+
+# ── resolve_quantize ───────────────────────────────────────────────────────────
+
+
+def test_resolve_quantize_priority_chain():
+    """Explicit flag → model default → preset → bf16 (None)."""
+    from fluxgen.models import resolve_quantize
+
+    spec = get_model_spec("qwen21")  # default_quantize=4
+    # Explicit flag wins over the model default.
+    assert resolve_quantize(spec, {"quantize": 8}, cli_quantize=8) == 8
+    assert resolve_quantize(spec, {"quantize": 8}, cli_quantize=16) == 16
+    # Model default beats the preset value.
+    assert resolve_quantize(spec, {"quantize": 8}) == 4
+    # Models without a default fall through to the preset.
+    zimage_spec = get_model_spec("zimage")
+    assert resolve_quantize(zimage_spec, {"quantize": 8}) == 8
+    assert resolve_quantize(zimage_spec, {"quantize": None}) is None
+    assert resolve_quantize(zimage_spec, None) is None
+
+
+def test_generate_image_applies_qwen21_default_quantize(tmp_path):
+    """model=None path (MCP): the spec's q4 default must beat the preset's q8."""
+    from fluxgen.generator import generate_image
+    from fluxgen.models import ModelManager
+
+    mock_model = MagicMock()
+    mock_result = MagicMock()
+    mock_result.image = MagicMock()
+    mock_model.generate_image.return_value = mock_result
+
+    with patch.object(
+        ModelManager, "get_model", return_value=mock_model
+    ) as mock_get:
+        generate_image(
+            prompt="a fox",
+            preset={"steps": None, "guidance": None, "quantize": 8},
+            seed=1,
+            output=str(tmp_path / "out.png"),
+            width=64,
+            height=64,
+            style="none",
+            model_name="qwen21",
+        )
+
+    assert mock_get.call_args.kwargs["quantize"] == 4
+    mock_model.generate_image.assert_called_once()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
 
