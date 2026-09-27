@@ -148,6 +148,7 @@ def build_server(settings: MCPSettings) -> MCPServer:
         prompt: str,
         body,
         ctx: Context | None,
+        negative_prompt: str | None = None,
     ):
         """Run a tool body inside the safety envelope.
 
@@ -176,6 +177,7 @@ def build_server(settings: MCPSettings) -> MCPServer:
                 make_audit_record(
                     tool=tool_name,
                     prompt=prompt,
+                    negative_prompt=negative_prompt,
                     model=None,
                     seed=None,
                     started_at=time.perf_counter(),
@@ -200,6 +202,7 @@ def build_server(settings: MCPSettings) -> MCPServer:
                     make_audit_record(
                         tool=tool_name,
                         prompt=prompt,
+                        negative_prompt=negative_prompt,
                         model=None,
                         seed=None,
                         started_at=started,
@@ -220,6 +223,7 @@ def build_server(settings: MCPSettings) -> MCPServer:
                     make_audit_record(
                         tool=tool_name,
                         prompt=prompt,
+                        negative_prompt=negative_prompt,
                         model=None,
                         seed=None,
                         started_at=started,
@@ -239,6 +243,7 @@ def build_server(settings: MCPSettings) -> MCPServer:
                     make_audit_record(
                         tool=tool_name,
                         prompt=prompt,
+                        negative_prompt=negative_prompt,
                         model=meta.get("model"),
                         seed=meta.get("seed"),
                         started_at=started,
@@ -255,6 +260,7 @@ def build_server(settings: MCPSettings) -> MCPServer:
                     make_audit_record(
                         tool=tool_name,
                         prompt=prompt,
+                        negative_prompt=negative_prompt,
                         model=None,
                         seed=None,
                         started_at=started,
@@ -272,6 +278,7 @@ def build_server(settings: MCPSettings) -> MCPServer:
                 make_audit_record(
                     tool=tool_name,
                     prompt=prompt,
+                    negative_prompt=negative_prompt,
                     model=result.get("model"),
                     seed=result.get("seed"),
                     started_at=started,
@@ -332,7 +339,9 @@ def build_server(settings: MCPSettings) -> MCPServer:
                 output_subdir=output_subdir,
             )
 
-        return await _with_safety("generate_image", prompt, _body, ctx)
+        return await _with_safety(
+            "generate_image", prompt, _body, ctx, negative_prompt=negative_prompt
+        )
 
     @server.tool(
         name="edit_image",

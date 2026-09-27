@@ -126,6 +126,7 @@ def validate_init_image(
     result = validate_edit_inputs([path], max_bytes=max_bytes, max_dimension=max_dimension)
     return result[0]
 
+
 def resolve_steps(steps: int | None, settings: MCPSettings) -> int | None:
     """Validate a caller-supplied inference step count.
 
@@ -143,10 +144,24 @@ def resolve_steps(steps: int | None, settings: MCPSettings) -> int | None:
     return int(steps)
 
 
+# Upper bound for caller-supplied guidance. Real checkpoints live in
+# 1.0-10.0; anything beyond is a denial-of-service-grade compute request
+# (each CFG pass re-runs the text encoder + transformer), not a
+# meaningful sampling parameter.
+MAX_GUIDANCE = 20.0
+
+
 def resolve_guidance(guidance: float | None) -> float | None:
-    """Validate a caller-supplied guidance scale. ``None`` = not requested."""
+    """Validate a caller-supplied guidance scale. ``None`` = not requested.
+
+    Bounded to ``(0, MAX_GUIDANCE]``: guidance multiplies sampler compute,
+    so an untrusted caller must not request arbitrary values.
+    """
     if guidance is None:
         return None
-    if guidance <= 0:
-        raise MCPError(E_BAD_ARG, f"guidance must be > 0; got {guidance}")
+    if guidance <= 0 or guidance > MAX_GUIDANCE:
+        raise MCPError(
+            E_BAD_ARG,
+            f"guidance must be in (0, {MAX_GUIDANCE}]; got {guidance}",
+        )
     return float(guidance)

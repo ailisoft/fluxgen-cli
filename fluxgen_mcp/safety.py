@@ -296,12 +296,16 @@ def make_audit_record(
     agent_id: str | None = None,
     output_path: str | None = None,
     input_paths: list[str] | None = None,
+    negative_prompt: str | None = None,
 ) -> dict[str, Any]:
     """Build an audit record dict. Caller writes via `AuditLog.write`.
 
     `input_paths` is included for `edit_image` (and any future tool
     with multi-file input) so the audit log captures what the
-    tool acted on, not just what it produced.
+    tool acted on, not just what it produced. `negative_prompt` is
+    included for `generate_image` when the caller supplied one: it is
+    model-facing content and must be audited on the same terms as the
+    prompt.
     """
     import hashlib
 
@@ -320,6 +324,8 @@ def make_audit_record(
     }
     if input_paths is not None:
         record["input_paths"] = list(input_paths)
+    if negative_prompt is not None:
+        record["negative_prompt"] = negative_prompt
     # `ts` is intentionally NOT set here. `AuditLog.write`'s
     # `setdefault` is the single source of truth for the
     # timestamp — keeps direct-write callers (tests, third-party)

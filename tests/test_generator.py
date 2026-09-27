@@ -265,16 +265,16 @@ if __name__ == "__main__":
 # ── explicit steps / guidance / negative_prompt (MCP surface) ──────────────────
 
 
-def test_resolve_inference_params_explicit_guidance_beats_guidance_free_spec():
-    """A deliberate caller guidance applies even on guidance-free specs;
-    only the preset/spec fallback is blocked for those."""
+def test_resolve_inference_params_guidance_free_spec_blocks_all_guidance():
+    """Guidance-free specs (turbo variants) ignore explicit and preset
+    guidance alike — mflux would silently coerce it to 0.0, so honoring
+    the kwarg would make a caller believe CFG applied when it did not."""
     spec = get_model_spec("zimage-turbo")  # guidance=None (turbo)
-    assert resolve_inference_params(spec, guidance=2.0, preset={"steps": 4}) == (4, 2.0)
-    # Preset guidance must still not leak into a guidance-free spec.
-    _, no_guidance = resolve_inference_params(
+    assert resolve_inference_params(spec, guidance=2.0, preset={"steps": 4}) == (4, None)
+    _, preset_blocked = resolve_inference_params(
         spec, preset={"steps": None, "guidance": 3.5}
     )
-    assert no_guidance is None
+    assert preset_blocked is None
 
 
 def test_generate_image_explicit_steps_and_guidance_override_preset(tmp_path):

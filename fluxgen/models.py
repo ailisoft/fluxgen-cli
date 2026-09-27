@@ -197,10 +197,10 @@ def resolve_inference_params(
     (when the key is present and not ``None``) → ``ModelSpec`` defaults.
 
     One exception to the plain priority chain: a guidance-free spec
-    (``guidance=None``, e.g. turbo variants) blocks the *preset*
-    fallback so stale preset values cannot leak CFG into a distilled
-    model — but an explicit ``guidance`` kwarg always wins, since it is
-    a deliberate caller decision (the MCP server passes one).
+    (``guidance=None``, e.g. turbo variants) ignores *all* guidance —
+    preset values and explicit kwargs alike. mflux silently coerces
+    guidance to 0.0 for such models, so honoring the kwarg would make
+    a caller believe CFG applied when it did not.
 
     ``Preset`` dataclasses always serialize ``guidance: None``, so a
     plain ``dict.get("guidance", default)`` would incorrectly skip
@@ -213,11 +213,6 @@ def resolve_inference_params(
         resolved_steps = preset.get("steps")
     if resolved_steps is None:
         resolved_steps = spec.steps
-
-    # Explicit caller guidance always applies (see docstring); the
-    # guidance-free guard only blocks the preset/spec fallbacks.
-    if guidance is not None:
-        return resolved_steps, guidance
 
     if spec.guidance is None:
         return resolved_steps, None

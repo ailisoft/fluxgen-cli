@@ -368,7 +368,7 @@ async def test_generate_guidance_passthrough(tmp_path: Path, mock_generate):
     await generate_image_tool(
         settings=s,
         prompt="a cat",
-        model=None,
+        model="zimage",
         preset=None,
         guidance=2.5,
         width=None,
@@ -484,3 +484,69 @@ async def test_generate_negative_prompt_blocklist(tmp_path: Path):
             output_subdir="default",
         )
     assert exc.value.code == E_PROMPT_REJECTED
+
+
+async def test_generate_guidance_on_guidance_free_model_rejected(tmp_path: Path):
+    """Turbo models silently coerce guidance to 0.0 inside mflux; the tool
+    must reject instead of letting a caller believe CFG applied."""
+    s = _settings(tmp_path)  # zimage-turbo is the default model
+    with pytest.raises(MCPError) as exc:
+        await generate_image_tool(
+            settings=s,
+            prompt="a cat",
+            model=None,
+            preset=None,
+            guidance=2.5,
+            width=None,
+            height=None,
+            seed=None,
+            style=None,
+            init_image_path=None,
+            strength=None,
+            output_subdir="default",
+        )
+    assert exc.value.code == E_BAD_ARG
+    assert "guidance-free" in str(exc.value)
+
+
+async def test_generate_negative_prompt_unsupported_model_rejected(tmp_path: Path):
+    """Flux.2 Klein has no negative_prompt kwarg in mflux; reject as a bad
+    argument instead of a TypeError from inside generation."""
+    s = _settings(tmp_path, allowed_generation_models=("flux2-klein4b",))
+    with pytest.raises(MCPError) as exc:
+        await generate_image_tool(
+            settings=s,
+            prompt="a cat",
+            model="flux2-klein4b",
+            preset=None,
+            negative_prompt="blurry",
+            width=None,
+            height=None,
+            seed=None,
+            style=None,
+            init_image_path=None,
+            strength=None,
+            output_subdir="default",
+        )
+    assert exc.value.code == E_BAD_ARG
+    assert "does not support negative_prompt" in str(exc.value)
+
+
+async def test_generate_guidance_upper_bound_rejected(tmp_path: Path):
+    s = _settings(tmp_path, allowed_generation_models=("zimage",))
+    with pytest.raises(MCPError) as exc:
+        await generate_image_tool(
+            settings=s,
+            prompt="a cat",
+            model="zimage",
+            preset=None,
+            guidance=1e9,
+            width=None,
+            height=None,
+            seed=None,
+            style=None,
+            init_image_path=None,
+            strength=None,
+            output_subdir="default",
+        )
+    assert exc.value.code == E_BAD_ARG

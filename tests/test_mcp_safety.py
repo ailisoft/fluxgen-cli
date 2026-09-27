@@ -274,6 +274,23 @@ def test_make_audit_record_includes_prompt_and_hash():
     assert len(rec["prompt_hash"]) == 64  # sha256 hex
     assert rec["duration_s"] == 1.234
     assert rec["seed"] == 42
+    assert "negative_prompt" not in rec  # key omitted when not supplied
+
+
+def test_make_audit_record_includes_negative_prompt_when_supplied():
+    rec = make_audit_record(
+        tool="generate_image",
+        prompt="a cat",
+        model="zimage",
+        seed=42,
+        started_at=0.0,
+        ended_at=1.0,
+        result="ok",
+        error_code=None,
+        negative_prompt="",
+    )
+    # Empty string is a valid explicit value and must be recorded.
+    assert rec["negative_prompt"] == ""
 
 
 # ── ConcurrencyGate ─────────────────────────────────────────────────────────

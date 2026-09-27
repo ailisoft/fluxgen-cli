@@ -29,6 +29,7 @@ from fluxgen.generator import (
     generate_image,
     generate_random_filename,
 )
+from fluxgen.models import MODELS, get_model_spec
 from fluxgen.presets import PRESETS, PRESETS_BY_NAME
 
 from fluxgen_mcp.config import MCPSettings
@@ -135,16 +136,35 @@ async def generate_image_tool(
         )
     final_guidance = resolve_guidance(guidance)
 
+    # Model-level parameter compatibility, rejected here (E_BAD_ARG)
+    # rather than surfacing as a model failure or, worse, being
+    # silently ignored by mflux:
+    #   - guidance-free models (turbo variants) would coerce guidance
+    #     to 0.0, making a caller believe CFG applied when it did not;
+    #   - models whose generate_image signature lacks negative_prompt
+    #     (Flux.2 Klein) would raise a bare TypeError inside mflux.
+    target_spec = get_model_spec(target_model)
+    if final_guidance is not None and target_spec.guidance is None:
+        raise MCPError(
+            E_BAD_ARG,
+            f"model {target_model!r} is guidance-free; it does not accept guidance",
+        )
+
     # Negative conditioning shares the prompt safety policy (length cap
-    # + blocklist). An empty string is valid — it is what enables true
-    # CFG > 1.0 on models like qwen21 — so only None means "not
-    # requested". Models whose mflux signature lacks the kwarg are
-    # rejected here rather than deep inside generation.
+    # + blocklist). An empty string is a valid explicit value, so only
+    # None means "not requested".
     final_negative_prompt: str | None = None
     if negative_prompt is not None:
         if not isinstance(negative_prompt, str):
             raise MCPError(E_BAD_ARG, "negative_prompt must be a string")
         validate_prompt(settings, negative_prompt)
+        if not target_spec.supports_negative_prompt:
+            raise MCPError(
+                E_BAD_ARG,
+                f"model {target_model!r} does not support negative_prompt; "
+                f"models with support: "
+                f"{', '.join(n for n, s in MODELS.items() if s.supports_negative_prompt)}",
+            )
         final_negative_prompt = negative_prompt
 
     final_w = width if width is not None else 512
