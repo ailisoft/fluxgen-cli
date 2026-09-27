@@ -92,6 +92,24 @@ def test_editor_edit_flow_uses_mflux(mock_get_model, tmp_path):
 
 
 @patch("fluxgen.models.ModelManager.get_model")
+def test_editor_applies_spec_default_quantize_when_flag_omitted(mock_get_model):
+    """quantize=None + a spec default_quantize must load at the default.
+
+    No shipped edit model sets ``default_quantize`` yet (the qwen21 edit
+    variant is blocked upstream), so simulate one via a frozen-spec copy.
+    """
+    from dataclasses import replace
+
+    from fluxgen.models import DEFAULT_EDIT_MODEL, get_model_spec
+
+    editor = ImageEditor()
+    editor.spec = replace(get_model_spec(DEFAULT_EDIT_MODEL), default_quantize=4)
+    editor.load()
+
+    assert mock_get_model.call_args.kwargs["quantize"] == 4
+
+
+@patch("fluxgen.models.ModelManager.get_model")
 def test_editor_uses_model_defaults_when_steps_guidance_omitted(mock_get_model, tmp_path):
     from PIL import Image as PILImage
 

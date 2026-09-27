@@ -38,10 +38,11 @@ class ImageEditor:
         """Load the edit model into memory (idempotent)."""
         if self.mflux_model is not None:
             return
+        quantize = self.quantize if self.quantize is not None else self.spec.default_quantize
         logger.info(f"Loading mflux model '{self.model_name}' on MLX...")
         self.mflux_model = ModelManager.get_model(
             model_name=self.model_name,
-            quantize=self.quantize,
+            quantize=quantize,
         )
         logger.debug("MFLUX model loaded successfully.")
 
