@@ -281,6 +281,92 @@ def test_resolve_inference_params_qwen21_ignores_preset_guidance():
     assert guidance is None
 
 
+def test_qwen21_viggle_turbo_registered_as_generation_model():
+    """Viggle's 4-step turbo LoRA: generation-only, CFG-free, q4 by default."""
+    spec = get_model_spec("qwen21-viggle-turbo")
+    assert spec.capabilities == {"generate"}
+    assert spec.steps == 4
+    assert spec.guidance is None
+    assert spec.min_steps == 4
+    assert spec.default_quantize == 4
+    assert "qwen21-viggle-turbo" in SUPPORTED_GENERATION_MODELS
+    assert "qwen21-viggle-turbo" not in SUPPORTED_EDIT_MODELS
+    with pytest.raises(ValueError, match="does not support edit"):
+        require_capability("qwen21-viggle-turbo", "edit")
+
+
+def test_resolve_inference_params_short_circuits_below_min_steps():
+    """Step-distilled specs reject sub-floor step counts from kwargs or presets."""
+    spec = get_model_spec("qwen21-viggle-turbo")
+    for low in (1, 2, 3):
+        with pytest.raises(ValueError, match="sweet spot"):
+            resolve_inference_params(spec, steps=low)
+        with pytest.raises(ValueError, match="sweet spot"):
+            resolve_inference_params(spec, preset={"steps": low, "guidance": None})
+
+
+def test_resolve_inference_params_allows_min_steps_and_above():
+    spec = get_model_spec("qwen21-viggle-turbo")
+    assert resolve_inference_params(spec, steps=4) == (4, None)
+    assert resolve_inference_params(spec, steps=8) == (8, None)
+    assert resolve_inference_params(spec, preset={"steps": None, "guidance": None}) == (4, None)
+
+
+def test_min_steps_ignores_specs_without_a_floor():
+    """Existing specs keep their behavior: no min_steps, no short-circuit."""
+    spec = get_model_spec("zimage-turbo")
+    assert spec.min_steps is None
+    steps, guidance = resolve_inference_params(spec, steps=1)
+    assert steps == 1
+    assert guidance is None
+
+
+def test_qwen21_lora_mapping_covers_viggle_adapter_keys():
+    """Every key shape in the real Viggle r64 adapter header (454 tensors,
+    'transformer.'-prefixed lora_A/lora_B) matches exactly one mapping
+    target, and {block} patterns resolve to the right MLX module path.
+    """
+    from mflux.models.common.lora.mapping.lora_loader import LoRALoader
+
+    from fluxgen.qwen21_lora_mapping import Qwen21LoRAMapping
+
+    mappings = LoRALoader._build_pattern_mappings(Qwen21LoRAMapping.get_mapping())
+
+    def matched_targets(key: str) -> list[str]:
+        hits = [
+            m.target_path for m in mappings if LoRALoader._match_pattern(key, m.source_pattern) is not None
+        ]
+        return hits
+
+    block_modules = (
+        "attn.to_q",
+        "attn.to_k",
+        "attn.to_v",
+        "attn.to_out.0",
+        "img_mlp.proj",
+        "img_mlp.out",
+        "img_mlp.gate_layer",
+    )
+    for block in range(Qwen21LoRAMapping.NUM_TRANSFORMER_BLOCKS):
+        for module in block_modules:
+            mlx_path = f"transformer_blocks.{block}.{module}"
+            for suffix in ("lora_A.weight", "lora_B.weight"):
+                key = f"transformer.{mlx_path}.{suffix}"
+                hits = [h.replace("{block}", str(block)) for h in matched_targets(key)]
+                assert hits == [mlx_path], f"{key}: {hits}"
+
+    global_modules = (
+        "modulation.1",
+        "time_text_embed.timestep_embedder.linear_1",
+        "time_text_embed.timestep_embedder.linear_2",
+    )
+    for module in global_modules:
+        for suffix in ("lora_A.weight", "lora_B.weight"):
+            key = f"transformer.{module}.{suffix}"
+            hits = matched_targets(key)
+            assert hits == [module], f"{key}: {hits}"
+
+
 def test_generate_image_omits_guidance_for_qwen21(tmp_path):
     """End-to-end: qwen21 never receives a guidance kwarg (mflux defaults CFG 1.0)."""
     from fluxgen.generator import generate_image
