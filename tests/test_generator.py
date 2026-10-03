@@ -355,6 +355,8 @@ def test_qwen21_lora_mapping_covers_viggle_adapter_keys():
                 hits = [h.replace("{block}", str(block)) for h in matched_targets(key)]
                 assert hits == [mlx_path], f"{key}: {hits}"
 
+    # Checkpoint spelling → MLX module path. modulation is the known
+    # divergence: checkpoint modulation.1, MLX module modulation.layers.1.
     global_modules = (
         "modulation.1",
         "time_text_embed.timestep_embedder.linear_1",
@@ -364,7 +366,25 @@ def test_qwen21_lora_mapping_covers_viggle_adapter_keys():
         for suffix in ("lora_A.weight", "lora_B.weight"):
             key = f"transformer.{module}.{suffix}"
             hits = matched_targets(key)
-            assert hits == [module], f"{key}: {hits}"
+            expected = "modulation.layers.1" if module == "modulation.1" else module
+            assert hits == [expected], f"{key}: {hits}"
+
+
+def test_qwen21_lora_mapping_targets_resolve_on_real_transformer():
+    """Pattern matching alone can't catch an unresolvable model_path (the
+    loader only fails at apply time), so assert every mapping target
+    resolves to a linear module on a real Qwen21Transformer.
+    """
+    from mflux.models.common.lora.mapping.lora_loader import LoRALoader
+    from mflux.models.qwen21.model.qwen21_transformer.qwen21_transformer import Qwen21Transformer
+
+    from fluxgen.qwen21_lora_mapping import Qwen21LoRAMapping
+
+    transformer = Qwen21Transformer()
+    for target in Qwen21LoRAMapping.get_mapping():
+        module_path = target.model_path.replace("{block}", "0")
+        module = LoRALoader._get_target_module(transformer, module_path)
+        assert hasattr(module, "weight"), f"{target.model_path} is not a linear module"
 
 
 def test_generate_image_omits_guidance_for_qwen21(tmp_path):

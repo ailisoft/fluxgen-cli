@@ -5,10 +5,15 @@ mflux's qwen21 transformer keeps diffusers module names verbatim
 ``Qwen21WeightMapping.get_transformer_mapping``), so adapters trained
 against the diffusers pipeline (e.g. Viggle's turbo LoRAs) key their
 tensors ``transformer.<module path>.lora_A/lora_B.weight`` 1:1 with the
-MLX paths below. The generic loader already tries the ``transformer.`` /
-``diffusion_model.`` / ``base_model.model.`` prefixes and the
-lora_A/B, lora_up/down and ComfyUI-flat spellings, so this mapping only
-enumerates the transformer's linear module paths.
+MLX paths below. The one exception is ``modulation``: the checkpoint
+key is ``modulation.1`` while the MLX module lives at
+``modulation.layers.1`` (mflux wraps the Linear in an ``nn.Sequential``
+with a SiLU head), so that target overrides its module path.
+
+This mapping enumerates the checkpoint-key prefixes (``transformer.``,
+``diffusion_model.``, ``base_model.model.``, bare) and the lora_A/B,
+lora_up/down spellings itself; the loader only strips a trailing
+``.weight`` when matching.
 
 Every linear layer of the transformer is listed — not just the modules
 Viggle's adapter targets — so other qwen21 LoRAs load without mapping
@@ -55,7 +60,9 @@ class Qwen21LoRAMapping(LoRAMapping):
             Qwen21LoRAMapping._target("time_text_embed.timestep_embedder.linear_2"),
             Qwen21LoRAMapping._target("txt_in.in_layer"),
             Qwen21LoRAMapping._target("txt_in.out_layer"),
-            Qwen21LoRAMapping._target("modulation.1"),
+            # Checkpoint key modulation.1 → MLX module modulation.layers.1
+            # (nn.Sequential(SiLU, Linear)); see the module docstring.
+            Qwen21LoRAMapping._target("modulation.layers.1", checkpoint_path="modulation.1"),
             Qwen21LoRAMapping._target("norm_out.linear"),
             Qwen21LoRAMapping._target("proj_out"),
         ]
@@ -74,12 +81,17 @@ class Qwen21LoRAMapping(LoRAMapping):
         ]
 
     @staticmethod
-    def _target(model_path: str) -> LoRATarget:
+    def _target(model_path: str, *, checkpoint_path: str | None = None) -> LoRATarget:
+        """Build a target whose patterns are keyed on the checkpoint
+        spelling (``checkpoint_path``, default ``model_path``) while
+        ``model_path`` is the MLX module the loader must resolve.
+        """
+        key_path = checkpoint_path if checkpoint_path is not None else model_path
         return LoRATarget(
             model_path=model_path,
-            possible_up_patterns=Qwen21LoRAMapping._matrix_patterns(model_path, _UP_SUFFIXES),
-            possible_down_patterns=Qwen21LoRAMapping._matrix_patterns(model_path, _DOWN_SUFFIXES),
-            possible_alpha_patterns=[f"{prefix}{model_path}.alpha" for prefix in _PREFIXES],
+            possible_up_patterns=Qwen21LoRAMapping._matrix_patterns(key_path, _UP_SUFFIXES),
+            possible_down_patterns=Qwen21LoRAMapping._matrix_patterns(key_path, _DOWN_SUFFIXES),
+            possible_alpha_patterns=[f"{prefix}{key_path}.alpha" for prefix in _PREFIXES],
         )
 
     @staticmethod
