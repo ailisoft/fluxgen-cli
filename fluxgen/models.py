@@ -34,6 +34,11 @@ class ModelSpec:
     # models). Flux.2 Klein's signature lacks it, so callers must
     # not pass one there.
     supports_negative_prompt: bool = False
+    # Hard floor for step-distilled adapters (e.g. turbo LoRAs trained
+    # for an exact step count): below it the sampler runs off-schedule
+    # and output is unusable. ``resolve_inference_params`` short-circuits
+    # with the sweet spot named in the error instead of running.
+    min_steps: int | None = None
 
 
 def _make_zimage(quantize: int | None):
@@ -89,6 +94,51 @@ def _make_qwen21(quantize: int | None):
     from mflux.models.qwen21.variants.txt2img.qwen_image_21 import QwenImage21
 
     return QwenImage21(quantize=quantize, model_config=ModelConfig.qwen_image_21())
+
+
+_VIGGLE_TURBO_LORA = (
+    "Viggle/Qwen-Image-2.1-viggle-turbo:"
+    "Qwen-Image-2.1-viggle-turbo-4step-lora-r64.safetensors"
+)
+
+
+def _make_qwen21_with_lora(quantize: int | None, lora_ref: str, lora_scale: float):
+    # Shared Qwen-Image-2.1 LoRA-flavor factory: build the base model,
+    # then apply the adapter through mflux's generic LoRA loader. Future
+    # qwen21 LoRA flavors should stay a ModelSpec plus one call here.
+    import copy
+
+    from mflux.models.common.config import ModelConfig
+    from mflux.models.common.lora.mapping.lora_loader import LoRALoader
+    from mflux.models.qwen21.variants.txt2img.qwen_image_21 import QwenImage21
+
+    from fluxgen.qwen21_lora_mapping import Qwen21LoRAMapping
+
+    # Viggle ships a scheduler config with ``shift_terminal: null``
+    # ("the base config's 0.02 wrecks the last step"); mflux reads the
+    # same knob off ModelConfig, so clone the base config and clear it.
+    # copy.copy (not mutation): ModelConfig.qwen_image_21() is a cached
+    # shared instance.
+    model_config = copy.copy(ModelConfig.qwen_image_21())
+    model_config.sigma_shift_terminal = None
+
+    model = QwenImage21(quantize=quantize, model_config=model_config)
+    LoRALoader.load_and_apply_lora(
+        lora_mapping=Qwen21LoRAMapping.get_mapping(),
+        transformer=model.transformer,
+        lora_paths=[lora_ref],
+        lora_scales=[lora_scale],
+        # Kept unmerged on purpose: Viggle warns merging into bf16 drops a
+        # large share of this adapter's update ("keep the LoRA unmerged
+        # and at scale 1.0"), and at turbo step counts the unmerged
+        # per-step overhead is negligible.
+        bake_lora=False,
+    )
+    return model
+
+
+def _make_qwen21_viggle_turbo(quantize: int | None):
+    return _make_qwen21_with_lora(quantize, _VIGGLE_TURBO_LORA, lora_scale=1.0)
 
 
 _GENERATE = frozenset({"generate"})
@@ -166,6 +216,23 @@ MODELS: dict[str, ModelSpec] = {
         default_quantize=4,
         factory=_make_qwen21,
     ),
+    # Qwen-Image-2.1 + Viggle's 4-step turbo LoRA (r64): a DMD-distilled
+    # adapter trained for exactly 4 steps at CFG 1.0 (so guidance=None,
+    # same treatment as the other turbos). Same memory profile as
+    # ``qwen21`` — the bf16 text encoder stays resident either way and
+    # the q4 default keeps the 7B transformer fit for sub-64 GB
+    # machines. The adapter stays unmerged (see the factory). Fewer than
+    # 4 steps under-denoises into unusable output, so ``min_steps``
+    # short-circuits those runs instead of generating garbage.
+    "qwen21-viggle-turbo": ModelSpec(
+        name="qwen21-viggle-turbo",
+        capabilities=_GENERATE,
+        steps=4,
+        guidance=None,
+        default_quantize=4,
+        min_steps=4,
+        factory=_make_qwen21_viggle_turbo,
+    ),
 }
 
 DEFAULT_GENERATION_MODEL = "zimage-turbo"
@@ -238,6 +305,11 @@ def resolve_inference_params(
     guidance to 0.0 for such models, so honoring the kwarg would make
     a caller believe CFG applied when it did not.
 
+    Step-distilled specs (``min_steps`` set) short-circuit below their
+    floor: raising here is the point at which every entry point (CLI,
+    MCP, presets) has already folded its step choice in, so one check
+    covers them all.
+
     ``Preset`` dataclasses always serialize ``guidance: None``, so a
     plain ``dict.get("guidance", default)`` would incorrectly skip
     model defaults. This helper fixes that.
@@ -249,6 +321,14 @@ def resolve_inference_params(
         resolved_steps = preset.get("steps")
     if resolved_steps is None:
         resolved_steps = spec.steps
+
+    if spec.min_steps is not None and resolved_steps < spec.min_steps:
+        raise ValueError(
+            f"Model '{spec.name}' is distilled for {spec.steps} steps and "
+            f"produces unusable output below {spec.min_steps}; got "
+            f"{resolved_steps}. Set steps >= {spec.min_steps} "
+            f"(sweet spot: {spec.steps})."
+        )
 
     if spec.guidance is None:
         return resolved_steps, None
