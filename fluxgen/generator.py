@@ -95,17 +95,22 @@ def generate_image(
     # any file IO so an unsupported-model error is never masked by a file
     # validation error from a reference image the model would reject anyway.
     spec = require_capability(model_name, "generate")
+    # Error hints name only generation-capable models: edit-only entries
+    # carry the same flags but ``gen --model`` rejects them.
+    generative = (
+        n for n, s in MODELS.items() if "generate" in s.capabilities
+    )
     if negative_prompt is not None and not spec.supports_negative_prompt:
         raise ValueError(
             f"Model '{spec.name}' does not support negative_prompt. "
             f"Models with negative-prompt support: "
-            f"{', '.join(n for n, s in MODELS.items() if s.supports_negative_prompt)}"
+            f"{', '.join(n for n in generative if MODELS[n].supports_negative_prompt)}"
         )
     if init_image is not None and not spec.supports_init_image:
         raise ValueError(
             f"Model '{spec.name}' does not support init images. "
             f"Models with init-image support: "
-            f"{', '.join(n for n, s in MODELS.items() if s.supports_init_image)}"
+            f"{', '.join(n for n in generative if MODELS[n].supports_init_image)}"
         )
 
     if init_image is not None:

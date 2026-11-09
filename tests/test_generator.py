@@ -427,7 +427,7 @@ def test_generate_image_rejects_init_image_for_unsupported_model(tmp_path):
     init_path = tmp_path / "init.png"
     Image.new("RGB", (16, 16)).save(init_path)
 
-    with pytest.raises(ValueError, match="does not support init images"):
+    with pytest.raises(ValueError, match="does not support init images") as excinfo:
         generate_image(
             prompt="a fox",
             preset={"steps": None, "guidance": None, "quantize": 8},
@@ -440,6 +440,8 @@ def test_generate_image_rejects_init_image_for_unsupported_model(tmp_path):
             init_image=str(init_path),
             model=MagicMock(),
         )
+    # The hint must not suggest models `gen --model` would reject.
+    assert "klein-edit" not in str(excinfo.value)
 
 
 def test_qwen21_lora_mapping_covers_viggle_adapter_keys():
