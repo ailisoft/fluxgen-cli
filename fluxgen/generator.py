@@ -105,6 +105,12 @@ def generate_image(
             f"Models with negative-prompt support: "
             f"{', '.join(n for n, s in MODELS.items() if s.supports_negative_prompt)}"
         )
+    if init_image is not None and not spec.supports_init_image:
+        raise ValueError(
+            f"Model '{spec.name}' does not support init images. "
+            f"Models with init-image support: "
+            f"{', '.join(n for n, s in MODELS.items() if s.supports_init_image)}"
+        )
     # Explicit steps/guidance (MCP callers) take priority over the preset,
     # whose values in turn take priority over the spec defaults.
     steps, guidance = resolve_inference_params(
@@ -129,9 +135,16 @@ def generate_image(
         num_inference_steps=steps,
         height=height,
         width=width,
-        image_path=init_image,
-        image_strength=strength,
     )
+
+    # Img2img kwargs — forwarded only when an init image is requested.
+    # Models whose signature lacks the params (flux3-klein) are guarded
+    # above; omitting the kwargs when no init image is given keeps those
+    # signatures callable and changes nothing for the models that accept
+    # them (their defaults are None / unused without an init image).
+    if init_image is not None:
+        gen_kwargs["image_path"] = init_image
+        gen_kwargs["image_strength"] = strength
 
     # Add guidance only for models that support it
     if guidance is not None:

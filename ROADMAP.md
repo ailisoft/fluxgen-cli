@@ -24,6 +24,11 @@ in active development.
 
 ## Recently completed
 
+- **FLUX 3 Image Klein support (`--model flux3-klein` + `--model flux3-klein-edit`)** — shipped.
+  `flux3-klein` is registered as a generation-only model (16-step guidance-free flow-map
+  distilled; no negative prompt, no img2img) and `flux3-klein-edit` as an editing model
+  (up to ten reference images); `mflux` floor is `>=0.24.0` (the `flux3` module landed
+  upstream in 0.23.0) and the Python floor moved to 3.11 with it.
 - **Qwen-Image-2.1 support (`--model qwen21`)** — shipped. `qwen21` is registered as
   a generation-only model (40-step guidance-free, CFG 1.0); `mflux` floor is `>=0.20.0`
   (the `qwen21` module landed upstream there). Download/memory caveats live in `README.md`

@@ -2,8 +2,8 @@
 
 A CLI and Interactive REPL for local AI image generation and instruction-based image editing on macOS using mflux.
 
-- **Generate images** using state-of-the-art `mflux` backends: `zimage-turbo`, `zimage`, `flux2-klein4b`, `flux2-klein9b`, `krea2` (Krea 2 Turbo), and `qwen21` (Qwen-Image-2.1).
-- **Edit images** via natural language instructions using `flux2-klein-edit` (multi-image support).
+- **Generate images** using state-of-the-art `mflux` backends: `zimage-turbo`, `zimage`, `flux2-klein4b`, `flux2-klein9b`, `flux3-klein` (FLUX 3 Image Klein), `krea2` (Krea 2 Turbo), and `qwen21` (Qwen-Image-2.1).
+- **Edit images** via natural language instructions using `flux2-klein-edit` or `flux3-klein-edit` (multi-image support).
 - **Interactive REPL Mode** to keep models cached persistently in memory for near-instant successive runs.
 - **Robust Path Security & Validation** protecting against directory traversal and corrupted image inputs.
 - **Local Defaults** customizable in a simple `.fluxgen.toml` configuration.
@@ -29,7 +29,7 @@ uv run fluxgen --help
 
 ## Requirements & Authentication
 
-- Python 3.10+
+- Python 3.11+
 - **Apple Silicon Mac** with 32 GB+ unified memory is highly recommended.
 - **Hugging Face Hub Access** for model downloads.
 
@@ -116,9 +116,33 @@ Caveats:
   variant (`QwenImage21Edit`) is **not available yet** — it exists only on mflux's GitHub
   main, unreleased as of 0.20.0, so editing stays on `flux2-klein-edit`.
 
+#### FLUX 3 Image Klein (`--model flux3-klein`)
+
+`flux3-klein` runs [FLUX 3 Image Klein](https://huggingface.co/black-forest-labs/flux-3-image-klein),
+a 5.6B flow-map transformer with a Qwen3 4B text encoder. It is guidance-free (the flow map
+replaces CFG — no guidance value is ever passed to mflux for this model) and distills to
+16 steps. Recommended invocation:
+
+```bash
+fluxgen gen "A photograph of a red fox in a sunlit forest" --model flux3-klein --steps 16
+```
+
+Caveats:
+
+- Requires `mflux >= 0.23.0` (the `flux3` module landed upstream there); this CLI pins
+  `mflux >= 0.24.0`.
+- The shared presets (`fast` 5 / `standard` 9 / `quality` 16 steps) only align with this
+  model at `quality` — pass `--steps 16` (or your own value) explicitly for best quality.
+- First run downloads ~19 GB of bf16 weights (transformer + text encoder + VAE). Quantize
+  with `-q 8` / `-q 4` to shrink the footprint.
+- Negative prompts are **not** supported: mflux's txt2img signature has no
+  `negative_prompt` parameter for this model, and `guidance` values are ignored.
+- `--init-image` is **not** supported for generation (no img2img params); instruction
+  editing goes through `flux3-klein-edit`, which accepts up to ten reference images.
+
 ### 2. Instruction-Based Image Editing
 
-The `edit` command uses `flux2-klein-edit` (MLX). **Supports editing multiple input images at once.**
+The `edit` command uses `flux2-klein-edit` (default) or `flux3-klein-edit` (MLX). **Supports editing multiple input images at once.**
 
 ```bash
 # Single image edit
@@ -164,7 +188,7 @@ fluxgen> help
 - `-v`, `--verbose`: Show debug output and full error tracebacks.
 
 ### Generation Options (`generate`, `gen`)
-- `--model [zimage-turbo|zimage|flux2-klein4b|flux2-klein9b|krea2|qwen21]`: Model backend to use (default: `zimage-turbo`).
+- `--model [zimage-turbo|zimage|flux2-klein4b|flux2-klein9b|flux3-klein|krea2|qwen21]`: Model backend to use (default: `zimage-turbo`).
 - `-0`, `--fast`: Fast preset (fewer steps).
 - `-3`, `--standard`: Standard preset.
 - `-8`, `--quality`: Quality preset (higher steps).
@@ -199,7 +223,7 @@ fluxgen> help
 **Resolution priority** (highest to lowest): `--width`/`--height` flags > `--resolution` flag > `.fluxgen.toml` config > `tiny` default.
 
 ### Editing Options (`edit`)
-- `--model [flux2-klein-edit]`: Editing model to use (default: `flux2-klein-edit`).
+- `--model [flux2-klein-edit|flux3-klein-edit]`: Editing model to use (default: `flux2-klein-edit`).
 - `--output FILE`: Output filename (default: first input image name appended with a random word).
 - `--output-dir DIR`: Output directory (default: `output`).
 - `--steps INT`: Inference steps override.
@@ -281,8 +305,8 @@ max_prompt_chars = 2000
 max_concurrent_jobs = 1
 max_queue_depth = 4
 per_call_timeout_s = 600
-allowed_generation_models = ["zimage-turbo", "zimage", "flux2-klein4b", "flux2-klein9b", "krea2", "qwen21"]
-allowed_edit_models = ["flux2-klein-edit"]
+allowed_generation_models = ["zimage-turbo", "zimage", "flux2-klein4b", "flux2-klein9b", "flux3-klein", "krea2", "qwen21"]
+allowed_edit_models = ["flux2-klein-edit", "flux3-klein-edit"]
 prompt_blocklist = []
 audit_log_path = "~/.fluxgen-mcp-audit.log"
 pause_sentinel_path = "~/.fluxgen-mcp-paused"

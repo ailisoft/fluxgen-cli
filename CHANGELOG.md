@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added `flux3-klein` (FLUX 3 Image Klein, 16-step guidance-free flow-map distilled) and
+  `flux3-klein-edit` (same checkpoint, up to ten reference images) as generation and
+  editing backends. The txt2img variant has no `negative_prompt` or img2img params
+  upstream, so `--negative-prompt` and `--init-image` are rejected up front for
+  `flux3-klein` with a clear error (new `ModelSpec.supports_init_image` flag; img2img
+  kwargs are only forwarded when an init image is actually requested). ~19 GB first-run
+  download.
+- Bumped `mflux` floor to `>=0.24.0` (the `flux3` module landed upstream in 0.23.0;
+  0.24.0 adds Iris-3B and the Pillow 13 security release) and raised the Python floor
+  to 3.11 (mflux 0.24 drops 3.10).
 - Added per-call `steps`, `guidance`, and `negative_prompt` parameters to the MCP
   `generate_image` tool. `steps` is capped by the existing `max_steps` setting and overrides
   the preset (lets agents run beyond preset step counts); `guidance` is bounded to `[1.0, 20]`

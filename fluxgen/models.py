@@ -39,6 +39,11 @@ class ModelSpec:
     # and output is unusable. ``resolve_inference_params`` short-circuits
     # with the sweet spot named in the error instead of running.
     min_steps: int | None = None
+    # Whether the model's ``generate_image`` accepts ``image_path`` /
+    # ``image_strength`` (img2img). FLUX 3 Klein's txt2img signature lacks
+    # both (reference images live only on the edit variant), so callers
+    # must not pass them there.
+    supports_init_image: bool = True
 
 
 def _make_zimage(quantize: int | None):
@@ -141,6 +146,25 @@ def _make_qwen21_viggle_turbo(quantize: int | None):
     return _make_qwen21_with_lora(quantize, _VIGGLE_TURBO_LORA, lora_scale=1.0)
 
 
+def _make_flux3_klein(quantize: int | None):
+    # FLUX 3 Image Klein (distilled) — a 5.6B flow-map transformer with a
+    # Qwen3 4B text encoder; generates pixels through the FLUX.2 VAE.
+    # Requires mflux >= 0.23.0 (the flux3 module landed upstream there).
+    from mflux.models.common.config import ModelConfig
+    from mflux.models.flux3.variants import Flux3Klein
+
+    return Flux3Klein(quantize=quantize, model_config=ModelConfig.flux3_image_klein())
+
+
+def _make_flux3_klein_edit(quantize: int | None):
+    # Shares the distilled checkpoint with txt2img; accepts up to ten
+    # reference images through the editor's ``image_paths`` contract.
+    from mflux.models.common.config import ModelConfig
+    from mflux.models.flux3.variants import Flux3KleinEdit
+
+    return Flux3KleinEdit(quantize=quantize, model_config=ModelConfig.flux3_image_klein())
+
+
 _GENERATE = frozenset({"generate"})
 _EDIT = frozenset({"edit"})
 
@@ -232,6 +256,28 @@ MODELS: dict[str, ModelSpec] = {
         default_quantize=4,
         min_steps=4,
         factory=_make_qwen21_viggle_turbo,
+    ),
+    # FLUX 3 Image Klein (distilled): 16-step flow-map sampler, guidance-free
+    # (the flow map replaces CFG; mflux resolves guidance to None for this
+    # checkpoint, same treatment as the other distilled specs). txt2img has
+    # no negative_prompt kwarg and no image_path/image_strength kwargs, so
+    # both stay unsupported here — instruction editing goes through
+    # ``flux3-klein-edit``.
+    "flux3-klein": ModelSpec(
+        name="flux3-klein",
+        capabilities=_GENERATE,
+        steps=16,
+        guidance=None,
+        supports_negative_prompt=False,
+        supports_init_image=False,
+        factory=_make_flux3_klein,
+    ),
+    "flux3-klein-edit": ModelSpec(
+        name="flux3-klein-edit",
+        capabilities=_EDIT,
+        steps=16,
+        guidance=None,
+        factory=_make_flux3_klein_edit,
     ),
 }
 
