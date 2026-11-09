@@ -157,8 +157,8 @@ Caveats:
 - The step count is **fixed at 4**: `--steps` and step presets are accepted but have no
   effect, because mflux replaces the sampler schedule with the distilled one.
 - Negative prompts and `guidance` are **not** supported (mflux hard-codes both off for
-  the Turbo schedule); explicit `--negative-prompt` / `guidance` values are rejected
-  up front.
+  the Turbo schedule): explicit `--negative-prompt` is rejected up front, and preset
+  `guidance` values are silently ignored (MCP callers get guidance rejected instead).
 - `--init-image` is **not** supported (no img2img params upstream). Generation-only —
   there is no mflux edit checkpoint for Iris.
 - First run downloads ~14 GB of bf16 weights (transformer + text encoder). Quantize
