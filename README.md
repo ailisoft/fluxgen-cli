@@ -2,7 +2,7 @@
 
 A CLI and Interactive REPL for local AI image generation and instruction-based image editing on macOS using mflux.
 
-- **Generate images** using state-of-the-art `mflux` backends: `zimage-turbo`, `zimage`, `flux2-klein4b`, `flux2-klein9b`, `flux3-klein` (FLUX 3 Image Klein), `krea2` (Krea 2 Turbo), and `qwen21` (Qwen-Image-2.1).
+- **Generate images** using state-of-the-art `mflux` backends: `zimage-turbo`, `zimage`, `flux2-klein4b`, `flux2-klein9b`, `flux3-klein` (FLUX 3 Image Klein), `iris-3b` (Iris 3B Turbo), `krea2` (Krea 2 Turbo), and `qwen21` (Qwen-Image-2.1).
 - **Edit images** via natural language instructions using `flux2-klein-edit` or `flux3-klein-edit` (multi-image support).
 - **Interactive REPL Mode** to keep models cached persistently in memory for near-instant successive runs.
 - **Robust Path Security & Validation** protecting against directory traversal and corrupted image inputs.
@@ -141,6 +141,30 @@ Caveats:
 - `--init-image` is **not** supported for generation (no img2img params); instruction
   editing goes through `flux3-klein-edit`, which accepts up to ten reference images.
 
+#### Iris 3B (`--model iris-3b`)
+
+`iris-3b` runs [Iris 3B](https://huggingface.co/speridlabs/iris-3b) (Turbo), a 3B
+transformer that generates pixels directly — no VAE decode step. It is guidance-free
+and runs a fixed 4-step schedule distilled into the weights. Recommended invocation:
+
+```bash
+fluxgen gen "A photograph of a red fox in a sunlit forest" --model iris-3b
+```
+
+Caveats:
+
+- Requires `mflux >= 0.24.0` (the `iris` module landed upstream there).
+- The step count is **fixed at 4**: `--steps` and step presets are accepted but have no
+  effect, because mflux replaces the sampler schedule with the distilled one.
+- Negative prompts and `guidance` are **not** supported (mflux hard-codes both off for
+  the Turbo schedule); explicit `--negative-prompt` / `guidance` values are rejected
+  up front.
+- `--init-image` is **not** supported (no img2img params upstream). Generation-only —
+  there is no mflux edit checkpoint for Iris.
+- First run downloads ~14 GB of bf16 weights (transformer + text encoder). Quantize
+  with `-q 8` / `-q 4` to shrink the footprint.
+- Prompts truncate at 300 tokens (upstream `max_sequence_length`) — keep prompts short.
+
 ### 2. Instruction-Based Image Editing
 
 The `edit` command uses `flux2-klein-edit` (default) or `flux3-klein-edit` (MLX). **Supports editing multiple input images at once.**
@@ -189,7 +213,7 @@ fluxgen> help
 - `-v`, `--verbose`: Show debug output and full error tracebacks.
 
 ### Generation Options (`generate`, `gen`)
-- `--model [zimage-turbo|zimage|flux2-klein4b|flux2-klein9b|flux3-klein|krea2|qwen21]`: Model backend to use (default: `zimage-turbo`).
+- `--model [zimage-turbo|zimage|flux2-klein4b|flux2-klein9b|flux3-klein|iris-3b|krea2|qwen21]`: Model backend to use (default: `zimage-turbo`).
 - `-0`, `--fast`: Fast preset (fewer steps).
 - `-3`, `--standard`: Standard preset.
 - `-8`, `--quality`: Quality preset (higher steps).
@@ -306,7 +330,7 @@ max_prompt_chars = 2000
 max_concurrent_jobs = 1
 max_queue_depth = 4
 per_call_timeout_s = 600
-allowed_generation_models = ["zimage-turbo", "zimage", "flux2-klein4b", "flux2-klein9b", "flux3-klein", "krea2", "qwen21"]
+allowed_generation_models = ["zimage-turbo", "zimage", "flux2-klein4b", "flux2-klein9b", "flux3-klein", "iris-3b", "krea2", "qwen21"]
 allowed_edit_models = ["flux2-klein-edit", "flux3-klein-edit"]
 prompt_blocklist = []
 audit_log_path = "~/.fluxgen-mcp-audit.log"

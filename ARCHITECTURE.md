@@ -3,7 +3,7 @@
 `fluxgen-cli` is a small Python CLI with two image workflows, both
 backed by `mflux` on Apple Silicon (MLX):
 
-- generation (`zimage*`, `flux2-klein*`, `flux3-klein`, `krea2`, `qwen21`)
+- generation (`zimage*`, `flux2-klein*`, `flux3-klein`, `iris-3b`, `krea2`, `qwen21`)
 - instruction editing (`flux2-klein-edit`, `flux3-klein-edit`)
 
 ## Entry Point
@@ -59,6 +59,8 @@ Supported generation backends:
 - `flux2-klein9b`
 - `flux3-klein` (FLUX 3 Image Klein; 16-step guidance-free flow-map distilled, ~19 GB
   download, no negative prompt, no img2img — needs `mflux >= 0.23.0`)
+- `iris-3b` (Iris 3B Turbo; fixed 4-step guidance-free pixel-space schedule, ~14 GB
+  download, no negative prompt, no img2img, steps fixed at 4 — needs `mflux >= 0.24.0`)
 - `krea2` (Krea 2 Turbo; 8-step distilled, ~33 GB download, ~32 GB+ unified memory)
 - `qwen21` (Qwen-Image-2.1; 40-step guidance-free, ~33 GB download, defaults to q4
   (~24 GB peak; bf16 peaks ~46 GB) — needs `mflux >= 0.20.0`)

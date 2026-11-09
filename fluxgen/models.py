@@ -165,6 +165,16 @@ def _make_flux3_klein_edit(quantize: int | None):
     return Flux3KleinEdit(quantize=quantize, model_config=ModelConfig.flux3_image_klein())
 
 
+def _make_iris3b(quantize: int | None):
+    # Iris-3B (Turbo) — a 3B pixel-space transformer (no VAE: the sample
+    # itself is the RGB image) with a Qwen3 4B text encoder. Requires
+    # mflux >= 0.24.0 (the iris module landed upstream there).
+    from mflux.models.common.config import ModelConfig
+    from mflux.models.iris import Iris
+
+    return Iris(quantize=quantize, model_config=ModelConfig.iris_3b())
+
+
 _GENERATE = frozenset({"generate"})
 _EDIT = frozenset({"edit"})
 
@@ -278,6 +288,25 @@ MODELS: dict[str, ModelSpec] = {
         steps=16,
         guidance=None,
         factory=_make_flux3_klein_edit,
+    ),
+    # Iris-3B (Turbo): the 4-step schedule is distilled into the weights —
+    # mflux replaces any passed steps with the schedule's fixed count and
+    # hard-codes guidance/negative_prompt off (``guidance=None`` here makes
+    # explicit guidance an error instead of a silent no-op, same treatment
+    # as the other turbos; ``--steps``/presets are accepted but have no
+    # effect — documented in the README). Pixel-space output, no VAE decode
+    # step; generate_image also has no image_path/image_strength params, so
+    # img2img is unsupported. Prompts truncate at 300 tokens upstream
+    # (max_sequence_length). Generation-only: there is no mflux edit
+    # checkpoint for Iris.
+    "iris-3b": ModelSpec(
+        name="iris-3b",
+        capabilities=_GENERATE,
+        steps=4,
+        guidance=None,
+        supports_negative_prompt=False,
+        supports_init_image=False,
+        factory=_make_iris3b,
     ),
 }
 

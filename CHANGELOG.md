@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added `iris-3b` (Iris 3B Turbo) as a generation-only model: 3B pixel-space transformer
+  (no VAE decode step) with a Qwen3 4B text encoder, fixed 4-step guidance-free schedule.
+  `--steps` and step presets are accepted but have no effect (mflux replaces the schedule
+  with the distilled one); `--negative-prompt` / explicit guidance / `--init-image` are
+  rejected up front (mflux hard-codes them off for the Turbo schedule and the signature
+  has no img2img params). Prompts truncate at 300 tokens upstream. ~14 GB first-run
+  download.
 - Added `flux3-klein` (FLUX 3 Image Klein, 16-step guidance-free flow-map distilled) and
   `flux3-klein-edit` (same checkpoint, up to ten reference images) as generation and
   editing backends. The txt2img variant has no `negative_prompt` or img2img params

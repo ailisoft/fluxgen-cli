@@ -444,6 +444,49 @@ def test_generate_image_rejects_init_image_for_unsupported_model(tmp_path):
     assert "klein-edit" not in str(excinfo.value)
 
 
+def test_iris3b_registered_as_generation_model():
+    """Iris-3B Turbo: generation-only, fixed 4-step schedule, guidance-free,
+    no negative prompt, no img2img."""
+    spec = get_model_spec("iris-3b")
+    assert spec.capabilities == {"generate"}
+    assert spec.steps == 4
+    assert spec.guidance is None
+    assert spec.supports_negative_prompt is False
+    assert spec.supports_init_image is False
+    assert "iris-3b" in SUPPORTED_GENERATION_MODELS
+    assert "iris-3b" not in SUPPORTED_EDIT_MODELS
+    with pytest.raises(ValueError, match="does not support edit"):
+        require_capability("iris-3b", "edit")
+
+
+def test_iris3b_steps_pass_through_but_mflux_pins_schedule():
+    """fluxgen forwards whatever steps it resolved; the mflux turbo schedule
+    is fixed regardless (registry default mirrors the schedule's 4 steps)."""
+    spec = get_model_spec("iris-3b")
+    assert resolve_inference_params(spec, preset={"steps": 9, "guidance": 4.0}) == (9, None)
+    assert resolve_inference_params(spec, guidance=7.0) == (4, None)
+
+
+def test_generate_image_rejects_init_image_for_iris3b():
+    """Iris's generate_image has no img2img params; the guard fires before
+    file validation, so a bogus path never gets read."""
+    from fluxgen.generator import generate_image
+
+    with pytest.raises(ValueError, match="does not support init images"):
+        generate_image(
+            prompt="a fox",
+            preset={"steps": None, "guidance": None, "quantize": 8},
+            seed=1,
+            output="unused.png",
+            width=64,
+            height=64,
+            style="none",
+            model_name="iris-3b",
+            init_image="/nonexistent/init.png",
+            model=MagicMock(),
+        )
+
+
 def test_qwen21_lora_mapping_covers_viggle_adapter_keys():
     """Every key shape in the real Viggle r64 adapter header (454 tensors,
     'transformer.'-prefixed lora_A/lora_B) matches exactly one mapping
