@@ -148,7 +148,7 @@ def _make_qwen21_viggle_turbo(quantize: int | None):
 
 def _make_flux3_klein(quantize: int | None):
     # FLUX 3 Image Klein (distilled) — a 5.6B flow-map transformer with a
-    # Qwen3 4B text encoder; generates pixels through the FLUX.2 VAE.
+    # Qwen3 4B text encoder; decodes through the FLUX.2 VAE.
     # Requires mflux >= 0.23.0 (the flux3 module landed upstream there).
     from mflux.models.common.config import ModelConfig
     from mflux.models.flux3.variants import Flux3Klein

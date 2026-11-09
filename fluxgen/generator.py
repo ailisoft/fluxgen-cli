@@ -91,13 +91,9 @@ def generate_image(
     if strength < 0.0 or strength > 1.0:
         raise ValueError(f"strength must be between 0.0 and 1.0, got {strength}")
 
-    if init_image is not None:
-        from fluxgen.image_validation import validate_image_file
-        # `validate_image_file` expands `~` and resolves symlinks/relative
-        # components. Capture the resolved Path so the model receives
-        # the canonical path rather than the raw CLI string.
-        init_image = validate_image_file(init_image, label="reference image")
-
+    # Request validation (capability + per-model kwarg support) runs before
+    # any file IO so an unsupported-model error is never masked by a file
+    # validation error from a reference image the model would reject anyway.
     spec = require_capability(model_name, "generate")
     if negative_prompt is not None and not spec.supports_negative_prompt:
         raise ValueError(
@@ -111,6 +107,14 @@ def generate_image(
             f"Models with init-image support: "
             f"{', '.join(n for n, s in MODELS.items() if s.supports_init_image)}"
         )
+
+    if init_image is not None:
+        from fluxgen.image_validation import validate_image_file
+        # `validate_image_file` expands `~` and resolves symlinks/relative
+        # components. Capture the resolved Path so the model receives
+        # the canonical path rather than the raw CLI string.
+        init_image = validate_image_file(init_image, label="reference image")
+
     # Explicit steps/guidance (MCP callers) take priority over the preset,
     # whose values in turn take priority over the spec defaults.
     steps, guidance = resolve_inference_params(

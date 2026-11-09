@@ -114,7 +114,8 @@ Caveats:
   presets carrying `guidance` are ignored for this model.
 - `--init-image` uses strength-based img2img. The upstream multi-reference / RGBA editing
   variant (`QwenImage21Edit`) is **not available yet** — it exists only on mflux's GitHub
-  main, unreleased as of 0.20.0, so editing stays on `flux2-klein-edit`.
+  main, unreleased as of 0.20.0, so editing stays on `flux2-klein-edit` /
+  `flux3-klein-edit`.
 
 #### FLUX 3 Image Klein (`--model flux3-klein`)
 
