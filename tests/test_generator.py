@@ -321,6 +321,224 @@ def test_min_steps_ignores_specs_without_a_floor():
     assert guidance is None
 
 
+def test_flux3_klein_registered_as_generation_model():
+    """FLUX 3 Klein: generation-only, 16-step flow-map distilled,
+    guidance-free, no negative prompt, no img2img."""
+    spec = get_model_spec("flux3-klein")
+    assert spec.capabilities == {"generate"}
+    assert spec.steps == 16
+    assert spec.guidance is None
+    assert spec.supports_negative_prompt is False
+    assert spec.supports_init_image is False
+    assert "flux3-klein" in SUPPORTED_GENERATION_MODELS
+    assert "flux3-klein" not in SUPPORTED_EDIT_MODELS
+    with pytest.raises(ValueError, match="does not support edit"):
+        require_capability("flux3-klein", "edit")
+
+
+def test_flux3_klein_edit_registered_as_edit_model():
+    """flux3-klein-edit shares the distilled checkpoint and is edit-only."""
+    spec = get_model_spec("flux3-klein-edit")
+    assert spec.capabilities == {"edit"}
+    assert spec.steps == 16
+    assert spec.guidance is None
+    assert "flux3-klein-edit" in SUPPORTED_EDIT_MODELS
+    assert "flux3-klein-edit" not in SUPPORTED_GENERATION_MODELS
+    with pytest.raises(ValueError, match="does not support generate"):
+        require_capability("flux3-klein-edit", "generate")
+
+
+def test_flux3_klein_ignores_preset_guidance():
+    """Guidance-free spec: preset and kwarg guidance are dropped, steps pass through."""
+    spec = get_model_spec("flux3-klein")
+    assert resolve_inference_params(spec, preset={"steps": 9, "guidance": 4.0}) == (9, None)
+    assert resolve_inference_params(spec, guidance=7.0) == (16, None)
+
+
+def test_generate_image_omits_img2img_kwargs_when_no_init_image(tmp_path):
+    """FLUX 3 Klein's generate_image lacks image_path/image_strength; a plain
+    txt2img call must not carry either kwarg."""
+    from fluxgen.generator import generate_image
+
+    mock_model = MagicMock()
+    mock_result = MagicMock()
+    mock_result.image = MagicMock()
+    mock_model.generate_image.return_value = mock_result
+
+    generate_image(
+        prompt="a fox",
+        preset={"steps": None, "guidance": None, "quantize": 8},
+        seed=1,
+        output=str(tmp_path / "out.png"),
+        width=64,
+        height=64,
+        style="none",
+        model_name="flux3-klein",
+        model=mock_model,
+    )
+
+    kwargs = mock_model.generate_image.call_args.kwargs
+    assert "image_path" not in kwargs
+    assert "image_strength" not in kwargs
+    assert "guidance" not in kwargs
+    assert kwargs["num_inference_steps"] == 16
+
+
+def test_generate_image_still_passes_img2img_kwargs_with_init_image(tmp_path):
+    """Models that accept img2img keep receiving image_path/image_strength."""
+    from PIL import Image
+
+    from fluxgen.generator import generate_image
+
+    init_path = tmp_path / "init.png"
+    Image.new("RGB", (16, 16)).save(init_path)
+
+    mock_model = MagicMock()
+    mock_result = MagicMock()
+    mock_result.image = MagicMock()
+    mock_model.generate_image.return_value = mock_result
+
+    generate_image(
+        prompt="a fox",
+        preset={"steps": 4, "guidance": None, "quantize": 8},
+        seed=1,
+        output=str(tmp_path / "out.png"),
+        width=64,
+        height=64,
+        style="none",
+        model_name="zimage-turbo",
+        init_image=str(init_path),
+        strength=0.6,
+        model=mock_model,
+    )
+
+    kwargs = mock_model.generate_image.call_args.kwargs
+    assert kwargs["image_path"] == init_path.resolve()
+    assert kwargs["image_strength"] == 0.6
+
+
+def test_generate_image_rejects_init_image_for_unsupported_model(tmp_path):
+    """FLUX 3 Klein txt2img has no img2img params; reject up front with a
+    clear error instead of a TypeError from inside mflux."""
+    from PIL import Image
+
+    from fluxgen.generator import generate_image
+
+    init_path = tmp_path / "init.png"
+    Image.new("RGB", (16, 16)).save(init_path)
+
+    with pytest.raises(ValueError, match="does not support init images") as excinfo:
+        generate_image(
+            prompt="a fox",
+            preset={"steps": None, "guidance": None, "quantize": 8},
+            seed=1,
+            output=str(tmp_path / "out.png"),
+            width=64,
+            height=64,
+            style="none",
+            model_name="flux3-klein",
+            init_image=str(init_path),
+            model=MagicMock(),
+        )
+    # The hint must not suggest models `gen --model` would reject.
+    assert "klein-edit" not in str(excinfo.value)
+
+
+def test_iris3b_registered_as_generation_model():
+    """Iris-3B Turbo: generation-only, fixed 4-step schedule, guidance-free,
+    no negative prompt, no img2img, minimum-canvas floor."""
+    spec = get_model_spec("iris-3b")
+    assert spec.capabilities == {"generate"}
+    assert spec.steps == 4
+    assert spec.guidance is None
+    assert spec.supports_negative_prompt is False
+    assert spec.supports_init_image is False
+    assert spec.min_pixels == 442_368
+    assert "iris-3b" in SUPPORTED_GENERATION_MODELS
+    assert "iris-3b" not in SUPPORTED_EDIT_MODELS
+    with pytest.raises(ValueError, match="does not support edit"):
+        require_capability("iris-3b", "edit")
+
+
+def test_min_pixels_floor_is_none_for_latent_space_models():
+    """Only models verified to break on small canvases carry a floor."""
+    for name in ("zimage-turbo", "krea2", "qwen21", "flux3-klein"):
+        assert get_model_spec(name).min_pixels is None
+
+
+def test_generate_image_rejects_sub_floor_canvas(tmp_path):
+    """iris-3b at 512x512 verified-broken: reject before loading weights."""
+    from fluxgen.generator import generate_image
+
+    with pytest.raises(ValueError, match="at least 442,368 pixels"):
+        generate_image(
+            prompt="a fox",
+            preset={"steps": None, "guidance": None, "quantize": 8},
+            seed=1,
+            output=str(tmp_path / "out.png"),
+            width=512,
+            height=512,
+            style="none",
+            model_name="iris-3b",
+            model=MagicMock(),
+        )
+
+
+def test_generate_image_allows_canvas_at_floor(tmp_path):
+    """768x576 sits exactly on the verified-clean boundary and must pass."""
+    from fluxgen.generator import generate_image
+
+    mock_model = MagicMock()
+    mock_result = MagicMock()
+    mock_result.image = MagicMock()
+    mock_model.generate_image.return_value = mock_result
+
+    generate_image(
+        prompt="a fox",
+        preset={"steps": None, "guidance": None, "quantize": 8},
+        seed=1,
+        output=str(tmp_path / "out.png"),
+        width=768,
+        height=576,
+        style="none",
+        model_name="iris-3b",
+        model=mock_model,
+    )
+
+    kwargs = mock_model.generate_image.call_args.kwargs
+    assert kwargs["width"] == 768
+    assert kwargs["height"] == 576
+    mock_result.image.save.assert_called_once()
+
+
+def test_iris3b_steps_pass_through_but_mflux_pins_schedule():
+    """fluxgen forwards whatever steps it resolved; the mflux turbo schedule
+    is fixed regardless (registry default mirrors the schedule's 4 steps)."""
+    spec = get_model_spec("iris-3b")
+    assert resolve_inference_params(spec, preset={"steps": 9, "guidance": 4.0}) == (9, None)
+    assert resolve_inference_params(spec, guidance=7.0) == (4, None)
+
+
+def test_generate_image_rejects_init_image_for_iris3b():
+    """Iris's generate_image has no img2img params; the guard fires before
+    file validation, so a bogus path never gets read."""
+    from fluxgen.generator import generate_image
+
+    with pytest.raises(ValueError, match="does not support init images"):
+        generate_image(
+            prompt="a fox",
+            preset={"steps": None, "guidance": None, "quantize": 8},
+            seed=1,
+            output="unused.png",
+            width=64,
+            height=64,
+            style="none",
+            model_name="iris-3b",
+            init_image="/nonexistent/init.png",
+            model=MagicMock(),
+        )
+
+
 def test_qwen21_lora_mapping_covers_viggle_adapter_keys():
     """Every key shape in the real Viggle r64 adapter header (454 tensors,
     'transformer.'-prefixed lora_A/lora_B) matches exactly one mapping

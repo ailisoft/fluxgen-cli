@@ -91,6 +91,37 @@ def generate_image(
     if strength < 0.0 or strength > 1.0:
         raise ValueError(f"strength must be between 0.0 and 1.0, got {strength}")
 
+    # Request validation (capability + per-model kwarg support) runs before
+    # any file IO so an unsupported-model error is never masked by a file
+    # validation error from a reference image the model would reject anyway.
+    spec = require_capability(model_name, "generate")
+    # Error hints name only generation-capable models: edit-only entries
+    # carry the same flags but ``gen --model`` rejects them.
+    generative = (
+        n for n, s in MODELS.items() if "generate" in s.capabilities
+    )
+    if negative_prompt is not None and not spec.supports_negative_prompt:
+        raise ValueError(
+            f"Model '{spec.name}' does not support negative_prompt. "
+            f"Models with negative-prompt support: "
+            f"{', '.join(n for n in generative if MODELS[n].supports_negative_prompt)}"
+        )
+    if init_image is not None and not spec.supports_init_image:
+        raise ValueError(
+            f"Model '{spec.name}' does not support init images. "
+            f"Models with init-image support: "
+            f"{', '.join(n for n in generative if MODELS[n].supports_init_image)}"
+        )
+    if spec.min_pixels is not None and width * height < spec.min_pixels:
+        raise ValueError(
+            f"Model '{spec.name}' needs a canvas of at least "
+            f"{spec.min_pixels:,} pixels (width x height); got "
+            f"{width}x{height} = {width * height:,}. Below this, output "
+            f"breaks into patch-grid artifacts. Use a resolution preset "
+            f"like --resolution square/large or pass --width/--height "
+            f"(multiples of 16) totalling >= {spec.min_pixels:,} pixels."
+        )
+
     if init_image is not None:
         from fluxgen.image_validation import validate_image_file
         # `validate_image_file` expands `~` and resolves symlinks/relative
@@ -98,13 +129,6 @@ def generate_image(
         # the canonical path rather than the raw CLI string.
         init_image = validate_image_file(init_image, label="reference image")
 
-    spec = require_capability(model_name, "generate")
-    if negative_prompt is not None and not spec.supports_negative_prompt:
-        raise ValueError(
-            f"Model '{spec.name}' does not support negative_prompt. "
-            f"Models with negative-prompt support: "
-            f"{', '.join(n for n, s in MODELS.items() if s.supports_negative_prompt)}"
-        )
     # Explicit steps/guidance (MCP callers) take priority over the preset,
     # whose values in turn take priority over the spec defaults.
     steps, guidance = resolve_inference_params(
@@ -129,9 +153,16 @@ def generate_image(
         num_inference_steps=steps,
         height=height,
         width=width,
-        image_path=init_image,
-        image_strength=strength,
     )
+
+    # Img2img kwargs — forwarded only when an init image is requested.
+    # Models whose signature lacks the params (flux3-klein) are guarded
+    # above; omitting the kwargs when no init image is given keeps those
+    # signatures callable and changes nothing for the models that accept
+    # them (their defaults are None / unused without an init image).
+    if init_image is not None:
+        gen_kwargs["image_path"] = init_image
+        gen_kwargs["image_strength"] = strength
 
     # Add guidance only for models that support it
     if guidance is not None:

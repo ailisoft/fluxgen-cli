@@ -2,8 +2,8 @@
 
 A CLI and Interactive REPL for local AI image generation and instruction-based image editing on macOS using mflux.
 
-- **Generate images** using state-of-the-art `mflux` backends: `zimage-turbo`, `zimage`, `flux2-klein4b`, `flux2-klein9b`, `krea2` (Krea 2 Turbo), and `qwen21` (Qwen-Image-2.1).
-- **Edit images** via natural language instructions using `flux2-klein-edit` (multi-image support).
+- **Generate images** using state-of-the-art `mflux` backends: `zimage-turbo`, `zimage`, `flux2-klein4b`, `flux2-klein9b`, `flux3-klein` (FLUX 3 Image Klein), `iris-3b` (Iris 3B Turbo), `krea2` (Krea 2 Turbo), and `qwen21` (Qwen-Image-2.1).
+- **Edit images** via natural language instructions using `flux2-klein-edit` or `flux3-klein-edit` (multi-image support).
 - **Interactive REPL Mode** to keep models cached persistently in memory for near-instant successive runs.
 - **Robust Path Security & Validation** protecting against directory traversal and corrupted image inputs.
 - **Local Defaults** customizable in a simple `.fluxgen.toml` configuration.
@@ -29,7 +29,7 @@ uv run fluxgen --help
 
 ## Requirements & Authentication
 
-- Python 3.10+
+- Python 3.11+
 - **Apple Silicon Mac** with 32 GB+ unified memory is highly recommended.
 - **Hugging Face Hub Access** for model downloads.
 
@@ -114,11 +114,66 @@ Caveats:
   presets carrying `guidance` are ignored for this model.
 - `--init-image` uses strength-based img2img. The upstream multi-reference / RGBA editing
   variant (`QwenImage21Edit`) is **not available yet** — it exists only on mflux's GitHub
-  main, unreleased as of 0.20.0, so editing stays on `flux2-klein-edit`.
+  main, unreleased as of 0.20.0, so editing stays on `flux2-klein-edit` /
+  `flux3-klein-edit`.
+
+#### FLUX 3 Image Klein (`--model flux3-klein`)
+
+`flux3-klein` runs [FLUX 3 Image Klein](https://huggingface.co/black-forest-labs/flux-3-image-klein),
+a 5.6B flow-map transformer with a Qwen3 4B text encoder. It is guidance-free (the flow map
+replaces CFG — no guidance value is ever passed to mflux for this model) and distills to
+16 steps. Recommended invocation:
+
+```bash
+fluxgen gen "A photograph of a red fox in a sunlit forest" --model flux3-klein --steps 16
+```
+
+Caveats:
+
+- Requires `mflux >= 0.23.0` (the `flux3` module landed upstream there); this CLI pins
+  `mflux >= 0.24.0`.
+- The shared presets (`fast` 5 / `standard` 9 / `quality` 16 steps) only align with this
+  model at `quality` — pass `--steps 16` (or your own value) explicitly for best quality.
+- First run downloads ~19 GB of bf16 weights (transformer + text encoder + VAE). Quantize
+  with `-q 8` / `-q 4` to shrink the footprint.
+- Negative prompts are **not** supported: mflux's txt2img signature has no
+  `negative_prompt` parameter for this model, and `guidance` values are ignored.
+- `--init-image` is **not** supported for generation (no img2img params); instruction
+  editing goes through `flux3-klein-edit`, which accepts up to ten reference images.
+
+#### Iris 3B (`--model iris-3b`)
+
+`iris-3b` runs [Iris 3B](https://huggingface.co/speridlabs/iris-3b) (Turbo), a 3B
+transformer that generates pixels directly — no VAE decode step. It is guidance-free
+and runs a fixed 4-step schedule distilled into the weights. Recommended invocation:
+
+```bash
+fluxgen gen "A photograph of a red fox in a sunlit forest" --model iris-3b
+```
+
+Caveats:
+
+- Requires `mflux >= 0.24.0` (the `iris` module landed upstream there).
+- **Minimum canvas 442,368 pixels** (width × height). Iris generates pixels directly
+  and collapses into patch-grid/checkerboard artifacts on small canvases — the default
+  `tiny` (512×512) and `1:1` presets are rejected up front with a clear error. Verified
+  same-seed: 512×512 and 576×576 are broken; 768×576 (the `4:3` preset), 960×544
+  (`16:9`), 512×1024, 768×768 (`square`) and 1024×1024 (`large`) are clean. The cliff
+  sits between 1296 and 1728 16-px patches; the floor is the verified-clean boundary.
+- The step count is **fixed at 4**: `--steps` and step presets are accepted but have no
+  effect, because mflux replaces the sampler schedule with the distilled one.
+- Negative prompts and `guidance` are **not** supported (mflux hard-codes both off for
+  the Turbo schedule): explicit `--negative-prompt` is rejected up front, and preset
+  `guidance` values are silently ignored (MCP callers get guidance rejected instead).
+- `--init-image` is **not** supported (no img2img params upstream). Generation-only —
+  there is no mflux edit checkpoint for Iris.
+- First run downloads ~14 GB of bf16 weights (transformer + text encoder). Quantize
+  with `-q 8` / `-q 4` to shrink the footprint.
+- Prompts truncate at 300 tokens (upstream `max_sequence_length`) — keep prompts short.
 
 ### 2. Instruction-Based Image Editing
 
-The `edit` command uses `flux2-klein-edit` (MLX). **Supports editing multiple input images at once.**
+The `edit` command uses `flux2-klein-edit` (default) or `flux3-klein-edit` (MLX). **Supports editing multiple input images at once.**
 
 ```bash
 # Single image edit
@@ -164,7 +219,7 @@ fluxgen> help
 - `-v`, `--verbose`: Show debug output and full error tracebacks.
 
 ### Generation Options (`generate`, `gen`)
-- `--model [zimage-turbo|zimage|flux2-klein4b|flux2-klein9b|krea2|qwen21]`: Model backend to use (default: `zimage-turbo`).
+- `--model [zimage-turbo|zimage|flux2-klein4b|flux2-klein9b|flux3-klein|iris-3b|krea2|qwen21]`: Model backend to use (default: `zimage-turbo`).
 - `-0`, `--fast`: Fast preset (fewer steps).
 - `-3`, `--standard`: Standard preset.
 - `-8`, `--quality`: Quality preset (higher steps).
@@ -199,7 +254,7 @@ fluxgen> help
 **Resolution priority** (highest to lowest): `--width`/`--height` flags > `--resolution` flag > `.fluxgen.toml` config > `tiny` default.
 
 ### Editing Options (`edit`)
-- `--model [flux2-klein-edit]`: Editing model to use (default: `flux2-klein-edit`).
+- `--model [flux2-klein-edit|flux3-klein-edit]`: Editing model to use (default: `flux2-klein-edit`).
 - `--output FILE`: Output filename (default: first input image name appended with a random word).
 - `--output-dir DIR`: Output directory (default: `output`).
 - `--steps INT`: Inference steps override.
@@ -281,8 +336,8 @@ max_prompt_chars = 2000
 max_concurrent_jobs = 1
 max_queue_depth = 4
 per_call_timeout_s = 600
-allowed_generation_models = ["zimage-turbo", "zimage", "flux2-klein4b", "flux2-klein9b", "krea2", "qwen21"]
-allowed_edit_models = ["flux2-klein-edit"]
+allowed_generation_models = ["zimage-turbo", "zimage", "flux2-klein4b", "flux2-klein9b", "flux3-klein", "iris-3b", "krea2", "qwen21"]
+allowed_edit_models = ["flux2-klein-edit", "flux3-klein-edit"]
 prompt_blocklist = []
 audit_log_path = "~/.fluxgen-mcp-audit.log"
 pause_sentinel_path = "~/.fluxgen-mcp-paused"

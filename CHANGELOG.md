@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- Added `iris-3b` (Iris 3B Turbo) as a generation-only model: 3B pixel-space transformer
+  (no VAE decode step) with a Qwen3 4B text encoder, fixed 4-step guidance-free schedule.
+  `--steps` and step presets are accepted but have no effect (mflux replaces the schedule
+  with the distilled one); `--negative-prompt` / `--init-image` are rejected up front
+  (mflux hard-codes negative conditioning off for the Turbo schedule and the signature
+  has no img2img params), while preset `guidance` values are silently ignored (MCP
+  callers get guidance rejected instead). New `ModelSpec.min_pixels` floor: canvases
+  below 442,368 pixels (e.g. the default `tiny` 512×512) are rejected up front with a
+  clear error — Iris collapses into patch-grid artifacts there (verified same-seed:
+  512×512 / 576×576 broken; 768×576, 960×544, 512×1024, 768×768, 1024×1024 clean).
+  Prompts truncate at 300 tokens upstream. ~14 GB first-run download.
+- Added `flux3-klein` (FLUX 3 Image Klein, 16-step guidance-free flow-map distilled) and
+  `flux3-klein-edit` (same checkpoint, up to ten reference images) as generation and
+  editing backends. The txt2img variant has no `negative_prompt` or img2img params
+  upstream, so `--negative-prompt` and `--init-image` are rejected up front for
+  `flux3-klein` with a clear error (new `ModelSpec.supports_init_image` flag; img2img
+  kwargs are only forwarded when an init image is actually requested). ~19 GB first-run
+  download.
+- Bumped `mflux` floor to `>=0.24.0` (the `flux3` module landed upstream in 0.23.0;
+  0.24.0 adds Iris-3B and the Pillow 13 security release) and raised the Python floor
+  to 3.11 (mflux 0.24 drops 3.10).
 - Added per-call `steps`, `guidance`, and `negative_prompt` parameters to the MCP
   `generate_image` tool. `steps` is capped by the existing `max_steps` setting and overrides
   the preset (lets agents run beyond preset step counts); `guidance` is bounded to `[1.0, 20]`

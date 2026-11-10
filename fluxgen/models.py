@@ -39,6 +39,21 @@ class ModelSpec:
     # and output is unusable. ``resolve_inference_params`` short-circuits
     # with the sweet spot named in the error instead of running.
     min_steps: int | None = None
+    # Whether the model's ``generate_image`` accepts ``image_path`` /
+    # ``image_strength`` (img2img). FLUX 3 Klein's txt2img signature lacks
+    # both (reference images live only on the edit variant), so callers
+    # must not pass them there.
+    supports_init_image: bool = True
+    # Minimum canvas area (width * height in pixels) the model produces
+    # usable output at; ``generate_image`` rejects smaller canvases up
+    # front instead of returning garbage. Iris-3B generates pixels
+    # directly and collapses into patch-grid/checkerboard artifacts on
+    # small canvases (verified same-seed: 512x512 / 576x576 broken;
+    # 768x576, 960x544, 512x1024, 768x768, 1024x1024 clean — the cliff
+    # sits between 1296 and 1728 16-px patches, floor set at the
+    # verified-clean boundary). Latent-space models degrade gracefully
+    # and stay ``None``.
+    min_pixels: int | None = None
 
 
 def _make_zimage(quantize: int | None):
@@ -141,6 +156,35 @@ def _make_qwen21_viggle_turbo(quantize: int | None):
     return _make_qwen21_with_lora(quantize, _VIGGLE_TURBO_LORA, lora_scale=1.0)
 
 
+def _make_flux3_klein(quantize: int | None):
+    # FLUX 3 Image Klein (distilled) — a 5.6B flow-map transformer with a
+    # Qwen3 4B text encoder; decodes through the FLUX.2 VAE.
+    # Requires mflux >= 0.23.0 (the flux3 module landed upstream there).
+    from mflux.models.common.config import ModelConfig
+    from mflux.models.flux3.variants import Flux3Klein
+
+    return Flux3Klein(quantize=quantize, model_config=ModelConfig.flux3_image_klein())
+
+
+def _make_flux3_klein_edit(quantize: int | None):
+    # Shares the distilled checkpoint with txt2img; accepts up to ten
+    # reference images through the editor's ``image_paths`` contract.
+    from mflux.models.common.config import ModelConfig
+    from mflux.models.flux3.variants import Flux3KleinEdit
+
+    return Flux3KleinEdit(quantize=quantize, model_config=ModelConfig.flux3_image_klein())
+
+
+def _make_iris3b(quantize: int | None):
+    # Iris-3B (Turbo) — a 3B pixel-space transformer (no VAE: the sample
+    # itself is the RGB image) with a Qwen3 4B text encoder. Requires
+    # mflux >= 0.24.0 (the iris module landed upstream there).
+    from mflux.models.common.config import ModelConfig
+    from mflux.models.iris import Iris
+
+    return Iris(quantize=quantize, model_config=ModelConfig.iris_3b())
+
+
 _GENERATE = frozenset({"generate"})
 _EDIT = frozenset({"edit"})
 
@@ -232,6 +276,48 @@ MODELS: dict[str, ModelSpec] = {
         default_quantize=4,
         min_steps=4,
         factory=_make_qwen21_viggle_turbo,
+    ),
+    # FLUX 3 Image Klein (distilled): 16-step flow-map sampler, guidance-free
+    # (the flow map replaces CFG; mflux resolves guidance to None for this
+    # checkpoint, same treatment as the other distilled specs). txt2img has
+    # no negative_prompt kwarg and no image_path/image_strength kwargs, so
+    # both stay unsupported here — instruction editing goes through
+    # ``flux3-klein-edit``.
+    "flux3-klein": ModelSpec(
+        name="flux3-klein",
+        capabilities=_GENERATE,
+        steps=16,
+        guidance=None,
+        supports_negative_prompt=False,
+        supports_init_image=False,
+        factory=_make_flux3_klein,
+    ),
+    "flux3-klein-edit": ModelSpec(
+        name="flux3-klein-edit",
+        capabilities=_EDIT,
+        steps=16,
+        guidance=None,
+        factory=_make_flux3_klein_edit,
+    ),
+    # Iris-3B (Turbo): the 4-step schedule is distilled into the weights —
+    # mflux replaces any passed steps with the schedule's fixed count and
+    # hard-codes guidance/negative_prompt off (``guidance=None`` here makes
+    # explicit guidance an error instead of a silent no-op, same treatment
+    # as the other turbos; ``--steps``/presets are accepted but have no
+    # effect — documented in the README). Pixel-space output, no VAE decode
+    # step; generate_image also has no image_path/image_strength params, so
+    # img2img is unsupported. Prompts truncate at 300 tokens upstream
+    # (max_sequence_length). Generation-only: there is no mflux edit
+    # checkpoint for Iris.
+    "iris-3b": ModelSpec(
+        name="iris-3b",
+        capabilities=_GENERATE,
+        steps=4,
+        guidance=None,
+        supports_negative_prompt=False,
+        supports_init_image=False,
+        min_pixels=442_368,
+        factory=_make_iris3b,
     ),
 }
 
