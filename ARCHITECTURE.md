@@ -60,8 +60,9 @@ Supported generation backends:
 - `flux3-klein` (FLUX 3 Image Klein; 16-step guidance-free flow-map distilled, ~19 GB
   download, no negative prompt, no img2img — needs `mflux >= 0.23.0`)
 - `iris-3b` (Iris 3B Turbo; fixed 4-step guidance-free pixel-space schedule, ~14 GB
-  download, no negative prompt, no img2img, steps fixed at 4, needs >= 768×768
-  (512×512 breaks into patch-grid artifacts) — needs `mflux >= 0.24.0`)
+  download, no negative prompt, no img2img, steps fixed at 4, `min_pixels` floor at
+  442,368 (smaller canvases break into patch-grid artifacts; `generate_image` rejects
+  them up front) — needs `mflux >= 0.24.0`)
 - `krea2` (Krea 2 Turbo; 8-step distilled, ~33 GB download, ~32 GB+ unified memory)
 - `qwen21` (Qwen-Image-2.1; 40-step guidance-free, ~33 GB download, defaults to q4
   (~24 GB peak; bf16 peaks ~46 GB) — needs `mflux >= 0.20.0`)

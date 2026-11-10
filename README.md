@@ -154,10 +154,12 @@ fluxgen gen "A photograph of a red fox in a sunlit forest" --model iris-3b
 Caveats:
 
 - Requires `mflux >= 0.24.0` (the `iris` module landed upstream there).
-- **Do not use the default `tiny` (512×512) resolution preset.** Iris generates pixels
-  directly and is trained around 1024×1024; at 512×512 the output breaks down into
-  severe patch-grid/checkerboard artifacts (verified: same seed is clean at 768×768 and
-  1024×1024). Use `--resolution square` (768) or `--resolution large` (1024).
+- **Minimum canvas 442,368 pixels** (width × height). Iris generates pixels directly
+  and collapses into patch-grid/checkerboard artifacts on small canvases — the default
+  `tiny` (512×512) and `1:1` presets are rejected up front with a clear error. Verified
+  same-seed: 512×512 and 576×576 are broken; 768×576 (the `4:3` preset), 960×544
+  (`16:9`), 512×1024, 768×768 (`square`) and 1024×1024 (`large`) are clean. The cliff
+  sits between 1296 and 1728 16-px patches; the floor is the verified-clean boundary.
 - The step count is **fixed at 4**: `--steps` and step presets are accepted but have no
   effect, because mflux replaces the sampler schedule with the distilled one.
 - Negative prompts and `guidance` are **not** supported (mflux hard-codes both off for

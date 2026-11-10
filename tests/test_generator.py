@@ -446,17 +446,69 @@ def test_generate_image_rejects_init_image_for_unsupported_model(tmp_path):
 
 def test_iris3b_registered_as_generation_model():
     """Iris-3B Turbo: generation-only, fixed 4-step schedule, guidance-free,
-    no negative prompt, no img2img."""
+    no negative prompt, no img2img, minimum-canvas floor."""
     spec = get_model_spec("iris-3b")
     assert spec.capabilities == {"generate"}
     assert spec.steps == 4
     assert spec.guidance is None
     assert spec.supports_negative_prompt is False
     assert spec.supports_init_image is False
+    assert spec.min_pixels == 442_368
     assert "iris-3b" in SUPPORTED_GENERATION_MODELS
     assert "iris-3b" not in SUPPORTED_EDIT_MODELS
     with pytest.raises(ValueError, match="does not support edit"):
         require_capability("iris-3b", "edit")
+
+
+def test_min_pixels_floor_is_none_for_latent_space_models():
+    """Only models verified to break on small canvases carry a floor."""
+    for name in ("zimage-turbo", "krea2", "qwen21", "flux3-klein"):
+        assert get_model_spec(name).min_pixels is None
+
+
+def test_generate_image_rejects_sub_floor_canvas(tmp_path):
+    """iris-3b at 512x512 verified-broken: reject before loading weights."""
+    from fluxgen.generator import generate_image
+
+    with pytest.raises(ValueError, match="at least 442,368 pixels"):
+        generate_image(
+            prompt="a fox",
+            preset={"steps": None, "guidance": None, "quantize": 8},
+            seed=1,
+            output=str(tmp_path / "out.png"),
+            width=512,
+            height=512,
+            style="none",
+            model_name="iris-3b",
+            model=MagicMock(),
+        )
+
+
+def test_generate_image_allows_canvas_at_floor(tmp_path):
+    """768x576 sits exactly on the verified-clean boundary and must pass."""
+    from fluxgen.generator import generate_image
+
+    mock_model = MagicMock()
+    mock_result = MagicMock()
+    mock_result.image = MagicMock()
+    mock_model.generate_image.return_value = mock_result
+
+    generate_image(
+        prompt="a fox",
+        preset={"steps": None, "guidance": None, "quantize": 8},
+        seed=1,
+        output=str(tmp_path / "out.png"),
+        width=768,
+        height=576,
+        style="none",
+        model_name="iris-3b",
+        model=mock_model,
+    )
+
+    kwargs = mock_model.generate_image.call_args.kwargs
+    assert kwargs["width"] == 768
+    assert kwargs["height"] == 576
+    mock_result.image.save.assert_called_once()
 
 
 def test_iris3b_steps_pass_through_but_mflux_pins_schedule():

@@ -44,6 +44,16 @@ class ModelSpec:
     # both (reference images live only on the edit variant), so callers
     # must not pass them there.
     supports_init_image: bool = True
+    # Minimum canvas area (width * height in pixels) the model produces
+    # usable output at; ``generate_image`` rejects smaller canvases up
+    # front instead of returning garbage. Iris-3B generates pixels
+    # directly and collapses into patch-grid/checkerboard artifacts on
+    # small canvases (verified same-seed: 512x512 / 576x576 broken;
+    # 768x576, 960x544, 512x1024, 768x768, 1024x1024 clean — the cliff
+    # sits between 1296 and 1728 16-px patches, floor set at the
+    # verified-clean boundary). Latent-space models degrade gracefully
+    # and stay ``None``.
+    min_pixels: int | None = None
 
 
 def _make_zimage(quantize: int | None):
@@ -306,6 +316,7 @@ MODELS: dict[str, ModelSpec] = {
         guidance=None,
         supports_negative_prompt=False,
         supports_init_image=False,
+        min_pixels=442_368,
         factory=_make_iris3b,
     ),
 }

@@ -8,8 +8,11 @@
   with the distilled one); `--negative-prompt` / `--init-image` are rejected up front
   (mflux hard-codes negative conditioning off for the Turbo schedule and the signature
   has no img2img params), while preset `guidance` values are silently ignored (MCP
-  callers get guidance rejected instead). Prompts truncate at 300 tokens upstream.
-  ~14 GB first-run download.
+  callers get guidance rejected instead). New `ModelSpec.min_pixels` floor: canvases
+  below 442,368 pixels (e.g. the default `tiny` 512×512) are rejected up front with a
+  clear error — Iris collapses into patch-grid artifacts there (verified same-seed:
+  512×512 / 576×576 broken; 768×576, 960×544, 512×1024, 768×768, 1024×1024 clean).
+  Prompts truncate at 300 tokens upstream. ~14 GB first-run download.
 - Added `flux3-klein` (FLUX 3 Image Klein, 16-step guidance-free flow-map distilled) and
   `flux3-klein-edit` (same checkpoint, up to ten reference images) as generation and
   editing backends. The txt2img variant has no `negative_prompt` or img2img params

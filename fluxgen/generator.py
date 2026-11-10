@@ -112,6 +112,15 @@ def generate_image(
             f"Models with init-image support: "
             f"{', '.join(n for n in generative if MODELS[n].supports_init_image)}"
         )
+    if spec.min_pixels is not None and width * height < spec.min_pixels:
+        raise ValueError(
+            f"Model '{spec.name}' needs a canvas of at least "
+            f"{spec.min_pixels:,} pixels (width x height); got "
+            f"{width}x{height} = {width * height:,}. Below this, output "
+            f"breaks into patch-grid artifacts. Use a resolution preset "
+            f"like --resolution square/large or pass --width/--height "
+            f"(multiples of 16) totalling >= {spec.min_pixels:,} pixels."
+        )
 
     if init_image is not None:
         from fluxgen.image_validation import validate_image_file

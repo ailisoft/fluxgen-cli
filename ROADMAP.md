@@ -26,8 +26,9 @@ in active development.
 
 - **Iris 3B support (`--model iris-3b`)** — shipped. `iris-3b` (Turbo) is registered as
   a generation-only model (fixed 4-step guidance-free pixel-space schedule; no negative
-  prompt, no img2img); `mflux` floor is `>=0.24.0` (the `iris` module landed upstream
-  there). The upstream base variant (`iris-3b-base`, 100 steps, true CFG) is not yet
+  prompt, no img2img; sub-442k-pixel canvases rejected up front via
+  `ModelSpec.min_pixels` — Iris breaks into patch-grid artifacts there); `mflux` floor
+  is `>=0.24.0` (the `iris` module landed upstream there). The upstream base variant (`iris-3b-base`, 100 steps, true CFG) is not yet
   registered — add it if 100-step sampling is wanted.
 - **FLUX 3 Image Klein support (`--model flux3-klein` + `--model flux3-klein-edit`)** — shipped.
   `flux3-klein` is registered as a generation-only model (16-step guidance-free flow-map
