@@ -154,6 +154,10 @@ fluxgen gen "A photograph of a red fox in a sunlit forest" --model iris-3b
 Caveats:
 
 - Requires `mflux >= 0.24.0` (the `iris` module landed upstream there).
+- **Do not use the default `tiny` (512×512) resolution preset.** Iris generates pixels
+  directly and is trained around 1024×1024; at 512×512 the output breaks down into
+  severe patch-grid/checkerboard artifacts (verified: same seed is clean at 768×768 and
+  1024×1024). Use `--resolution square` (768) or `--resolution large` (1024).
 - The step count is **fixed at 4**: `--steps` and step presets are accepted but have no
   effect, because mflux replaces the sampler schedule with the distilled one.
 - Negative prompts and `guidance` are **not** supported (mflux hard-codes both off for
